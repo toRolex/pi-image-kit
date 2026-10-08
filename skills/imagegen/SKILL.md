@@ -11,13 +11,21 @@ Generates or edits images for the current project (for example website assets, g
 
 Unofficial, independently implemented pi port. The complete immutable upstream skill and sources are in `vendor/codex-0.160.0/`; `resources.json` tracks every original and runtime copy. Prompting, inspection, iteration, scripts and references remain complete. This section overrides Codex-specific execution advice in the preserved references.
 
-唯一 `image_generate` tool 支持新图、绝对路径编辑及活动会话分支最近一至五张图续改。引用契约见下方 Built-in edit semantics；CLI 执行集成由 #5 负责。预览不等于原图，编辑失败不自动运行 CLI。
+唯一 `image_generate` tool 支持新图、绝对路径编辑及活动会话分支最近一至五张图续改，复用同一结果管线。引用契约见下方 Built-in edit semantics；#5 的明确选择 CLI 路线独立可用，流程见下方。预览不等于原图，编辑失败不自动运行 CLI。
 
 Tool input: `prompt`, optional `transparent_background`, and authorized model extension `model`. User-explicit model IDs take precedence and are sent verbatim. For an agent-selected model set `model_source: "agent"` and `model_selection_basis` to actual verified task evidence; without evidence use `gpt-image-2.5`. Never invent capability, price, speed differences. Initial candidates: `gpt-image-2`, `gpt-image-2.5`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. Other model policy awaits confirmation: a temporary gate makes no request, not a permanent refusal policy. Model selection is never CLI consent.
 
 Requesting transparent background sends `background: "transparent"`; service reports are not verified alpha effects. Report unknown support and inspect the resulting alpha separately; never change model or route silently. Only the first base64 image is returned. Image content is displayed in pi, with an optional successful saved path. A save warning does not mean generation failed. Default saves are `<cwd>/.pi/images/`; configured `saveDirectory: false` disables saves.
 
-CLI resources are preserved without modifying scripts or choosing a new default. Upstream script default is not a settled pi CLI policy. Only explicit CLI choice plus separate cost/network/data authorization may lead to execution; use uv for every Python operation. #5 owns the executable integration/acceptance. No fallback on failure, batch requests, or a model choice.
+CLI 脚本原样保留，默认 `gpt-image-2` 仅是官方基线；pi CLI 默认策略仍未决。#5 提供明确选择门与实际脚本 localhost 验收，真实 API 验收未执行。
+
+### CLI 主动选择流程
+
+1. 默认继续使用 `image_generate`。tool 失败时说明失败；批量需求按默认 tool 分次处理；指定 model 只影响模型。三者均不构成 CLI 授权。
+2. 用户明确说“使用 CLI”或确认备用路线后，读 `references/cli.md` 的 pi 执行段。需要 mask、quality 或 batch 等 CLI 能力时，可解释差异并询问“是否改用完整官方 CLI？”，等待选择后再执行。
+3. 单独确认费用、网络、将发送的提示/参考图/mask/批量文件范围，确认 endpoint、Bearer key 已本地配置；不得索取聊天中的密钥，不使用 ChatGPT 登录。只有这些授权齐全才使用两个确认标志。
+4. 通过包内 `scripts/run-image-cli.mjs` 执行完整 `scripts/image_gen.py`，由 uv 管理 Python 与固定 SDK；原样传递 model、mask、quality、batch 等官方参数，不另写 SDK runner。显式 model 原样发送；未指定保留官方值，但不称默认策略已定。
+5. 检查退出码、实际输出文件和图像。失败明确报告，保留模型、认证与路线，等待用户下一步选择。报告 CLI 模式、模型、路径、覆盖范围，并区分 localhost mock 与真实服务证据。
 
 ## Top-level modes and rules
 
@@ -290,19 +298,7 @@ These conventions apply only to the CLI fallback. They do not describe pi `image
 ### Dependencies
 Use `uv` for all Python operations, including installation and script execution.
 
-Required Python package:
-```bash
-uv pip install openai
-```
-
-Optional for image inspection and downscaling:
-```bash
-uv pip install pillow
-```
-
-Portability note:
-- If you are using the installed skill outside this repo, use uv to install dependencies into that environment.
-- In uv-managed environments, `uv pip install ...` remains the preferred path.
+执行入口用 `uv run --no-project --no-config --with openai==2.30.0 --with pillow==12.1.0` 管理依赖，不修改官方脚本或用户 Python 项目。不要直接执行保留参考文档中的 `python` / `pip` 命令；按 `references/cli.md` 的 pi 执行段调用包内入口。首次下载依赖须遵循环境权限；不绕过安装策略。
 
 ### Environment
 - `OPENAI_API_KEY` must be set for live API calls.

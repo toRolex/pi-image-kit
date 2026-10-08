@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -254,6 +254,27 @@ test('recent 原图落盘路径被替换时 hash 拒绝，不把替换图或预�
     assert.match(JSON.stringify(value.result), /hash 不符/);
   } finally { await value.cleanup(); }
 });
+
+for (const corruption of ['source', 'version', 'sha256', 'missing-path', 'base64']) {
+  test(`本包损坏的 original ${corruption} 拒绝续改，不降级使用预览`, async () => {
+    const value = await run({ generations: [referencePng], saveFailure: corruption === 'base64', args: { prompt: '续改', num_last_images_to_include: 1 }, beforeRecent(manager) {
+      const entry = manager.getBranch().find((e) => e.type === 'message' && e.message.role === 'toolResult' && e.message.toolCallId === 'prior-0');
+      assert.ok(entry?.type === 'message' && entry.message.role === 'toolResult');
+      const original = (entry.message.details as { original: { source: string; version: number; sha256: string; path: string; base64: string } }).original;
+      if (corruption === 'missing-path') unlinkSync(original.path);
+      else if (corruption === 'version') original.version = 2;
+      else if (corruption === 'source') original.source = 'external';
+      else if (corruption === 'sha256') original.sha256 = 'invalid';
+      else original.base64 = '!invalid';
+    } });
+    try {
+      assert.equal(value.requests.length, 1);
+      assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+      assert.match(JSON.stringify(value.result), /原图.*(无效|无法读取)/);
+      assert.ok(!value.result.content.some((c) => c.type === 'image'));
+    } finally { await value.cleanup(); }
+  });
+}
 
 test('外部 tool 的不可信 original 字段不读路径，仅使用现存图片并如实说明预览限制', async () => {
   const value = await run({ generations: [png], args: { prompt: '续改外部图片', num_last_images_to_include: 1 }, beforeRecent(manager) {

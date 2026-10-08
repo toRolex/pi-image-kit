@@ -1,5 +1,30 @@
 # CLI reference (`scripts/image_gen.py`)
 
+## pi 执行段（modified from the fixed Codex 0.160.0 snapshot）
+
+以下段落优先于保留的上游示例。model/quality/mask/batch 需求只触发参数咨询，不构成 CLI 选择；用户须明确选择 CLI，且另行确认费用、网络和所发送数据范围，才执行。
+
+- 包根目录记为 `PACKAGE_ROOT`，由当前已安装 skill 所属包定位，不能假设 `CODEX_HOME`。
+- 在本地进程环境配置 `OPENAI_BASE_URL`（API 基址，如 `http://127.0.0.1:PORT/v1`）和 `OPENAI_API_KEY`（Bearer key）。不会读取 ChatGPT 登录，不从 tool 失败推导新认证。
+- 入口只传递参数、注入这两个变量并调用 uv；完整官方脚本原样执行。默认 model 仍是 `gpt-image-2`，quality 仍是 `medium`；CLI 默认是否改为 2.5 未决。
+- 上游示例中的 `python "$IMAGE_GEN"` 统一替换为下面的包内入口，所有官方参数保留。两个确认标志只在用户对应授权后添加，不能代用户生成授权。
+
+```sh
+node "$PACKAGE_ROOT/scripts/run-image-cli.mjs" --choose-cli --allow-network-data-cost -- \
+  generate --prompt "公开测试蓝点" --model gpt-image-2.5 \
+  --quality high --out output/imagegen/dot.png
+# 编辑：将 generate 换为 edit，并加入 --image /absolute/input.png --mask /absolute/mask.png
+# 批量：使用 generate-batch --input /absolute/jobs.jsonl --out-dir output/imagegen --concurrency 2
+```
+
+Python 依赖由 uv 固定为 `openai==2.30.0`、`pillow==12.1.0`；首次下载可能需要网络许可。无 shell 拼接、无临时 SDK runner，不裁剪参数。失败保留官方退出码与错误，不自动换模型/认证/路线。上游脚本自身的 batch 重试仍按官方参数执行，不等于 tool 自动重试。
+
+验收：localhost fake 服务实际执行 generation、显式 model、multipart edit + mask、async batch 并核对输出字节；不是 help/dry-run。multipart CLI 验收不证明默认 tool JSON edits 真实兼容。真实 API 调用未授权、未执行；真实证据不能算通过。Context7 本次 resolve 报 `fetch failed`，未取得 library ID 或 query 结果；使用固定官方脚本的 `OpenAI()`/`AsyncOpenAI()` 与参数源码核对，非当前官方在线文档验证。
+
+---
+
+以下为保留的上游参考正文；其环境、调用示例与选择条件由上面的 pi 执行段覆盖。
+
 This file is for the fallback CLI mode only. Read it when the user explicitly asks to use `scripts/image_gen.py` / CLI / API / model controls, or after the user explicitly confirms that a transparent-output request should use the `gpt-image-1.5` true-transparency fallback path.
 
 `generate-batch` is a CLI subcommand in this fallback path. It is not a top-level mode of the skill.

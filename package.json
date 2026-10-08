@@ -12,6 +12,7 @@
     "vendor",
     "resources.json",
     "scripts/verify-resources.mjs",
+    "scripts/run-image-cli.mjs",
     "LICENSE",
     "NOTICE",
     "README.md"

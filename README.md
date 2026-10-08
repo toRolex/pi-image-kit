@@ -52,7 +52,7 @@ pi install /absolute/path/to/pi-image-kit
 
 `vendor/codex-0.160.0/`：29 个公开源材料，包含完整 12 文件 imagegen skill、两份 Python 脚本、五份 references、agents、两份 assets、skill LICENSE，以及请求/tool 源码、根 LICENSE/NOTICE。不可变原样快照；原始上游图片是公开资源，不是实际生成图。
 
-`skills/imagegen/`：完整运行资源。只适配 `SKILL.md`，有 prominent modified 标识；脚本与其它资源逐字保留。完整原 Markdown 仍在 vendor。`resources.json` 列固定来源 URL、Git blob SHA1、SHA256、大小、运行副本映射及修改说明；`NOTICE` 保留完整上游告知并记录适配。许可 Apache-2.0。升级须 review，不追 latest。
+`skills/imagegen/`：完整运行资源。适配 `SKILL.md` 与 `references/cli.md`，有 prominent modified 标识；两份脚本与其它资源逐字保留。完整原 Markdown 仍在 vendor。`resources.json` 列固定来源 URL、Git blob SHA1、SHA256、大小、运行副本映射及修改说明；`NOTICE` 保留完整上游告知并记录适配。许可 Apache-2.0。升级须 review，不追 latest。
 
 ```sh
 pnpm audit:resources
@@ -77,5 +77,23 @@ mock 覆盖四模型显式选择、默认与 agent 依据、透明参数、首�
 - `src/tool.ts` 的 `createImageTool()`：唯一入口；#3 增路径引用，#4 增 recent。当前明确仅新图，未知编辑字段 schema 拒绝，绝不把编辑误做生成。
 - `src/config.ts` 的 `loadConfig()`：共同配置与认证；`requestImage()`：JSON `generations`/`edits` 共享传输，没有 multipart 或 CLI fallback。
 - `src/output.ts` 的 `imageOutput()`：统一第一项 image content、保存与 warning。`details.original` 标记本包 source/version、MIME、SHA256，成功保存时是原图路径，失败/禁用保存时留原始 base64；#4 应验证 provenance/hash 并从公开 session branch 取自产原图，而非把 pi 缩放预览当原图。自动 normalize 保留 details；任意其它扩展仍可能替换 details，不承诺通用宿主保证。
-- #5 才实现主动 CLI 备用闭环；完整脚本已打包但本票不执行。所有 Python 操作仅 uv。原脚本默认 `gpt-image-2` 未修改，不表示 pi CLI 默认决策已定。
+- #5 已实现明确选择 CLI 门与 localhost 完整脚本闭环，详见下节。原脚本默认 `gpt-image-2` 未修改，不表示 pi CLI 默认决策已定。
 - 真网关 JSON edits、透明支持、multipart 策略、候选外模型与 CLI 默认仍待确认；只 gate 受影响分支。
+
+## #5：明确选择完整官方 CLI
+
+默认仍使用 tool。失败、批量需求、model 选择都不授权 CLI；skill 主动说明可选路线并等待明确选择，再单独确认费用、网络、提示/图片/mask/批量材料发送范围。两个确认标志记录这些确认，不是自动推断用户同意。参考 `skills/imagegen/references/cli.md` 的 pi 执行段。
+
+配置本地 `OPENAI_BASE_URL` 与 `OPENAI_API_KEY`，然后在授权后执行：
+
+```sh
+node /absolute/package/scripts/run-image-cli.mjs --choose-cli --allow-network-data-cost -- \
+  generate --prompt "公开测试蓝点" --model gpt-image-2.5 \
+  --quality high --out output/imagegen/dot.png
+```
+
+入口用 uv 管理 `openai==2.30.0`、`pillow==12.1.0`，直接执行固定 Codex **0.160.0 / a956835d020762cb2b570053af06f643a11c0ecc** 的完整官方 `image_gen.py`，未修改脚本；支持原有 generate/edit/generate-batch、model/mask/quality/n/size 等参数。endpoint 与 Bearer 由受控子进程环境注入，无 ChatGPT 登录。不会继承个人 OpenAI/代理配置；失败不会启动其它 CLI、换模型或认证。完整上游 chroma helper 仍保留，未自动使用。
+
+`tests/cli.test.ts` 实际运行脚本，通过 localhost fake Images 服务验收生成、独立显式 `gpt-image-2.5-sunburst`、`gpt-image-2.5` mask 编辑、`gpt-image-2.5-flare` 双任务异步 batch，检查质量、Bearer、模型 ID、真实 PNG 输出字节。测试隔离 HOME、dummy key 与环境，只发送公共合成样本；通过 uv 公共 PyPI 下载依赖，缓存为临时目录。此为 mock 服务验收，不是只检查 help/解析；不证明真网关 multipart/透明或默认 tool JSON edits 兼容。测试不省略 Python 闭环，依赖下载失败明确失败。
+
+**真实 CLI API 验收未执行，不算通过。** CLI 默认是否改为 2.5 仍未决，保留官方 `gpt-image-2`/`medium` 不等于策略定案；真实费用/网络/数据授权未取得。Context7 本次 resolve 失败（fetch failed），依据固定官方源码记录，不声称 online query 成功。fresh Node 安装仍未验收，使用已有 ignored 依赖链接，不绕过 pnpm age/build 策略。

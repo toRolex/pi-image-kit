@@ -287,10 +287,10 @@
     {
       "path": "skills/imagegen/SKILL.md",
       "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/SKILL.md",
-      "sha256": "b4d4ff6f7119eac1b1ad5e81f7358b06ac3ab9b8a072c6e888305ab7a544daca",
+      "sha256": "3a8f6486a4d0b2129770faca1cb1e59c1eca2f4f0bda42c15c7f3069299126bc",
       "modified": true,
       "modifiedOn": "2026-10-08",
-      "adaptation": "Unofficial pi image_generate routing, endpoint/key config, model selection and pending policies, original/preview semantics, pi save paths, uv-only Python, generation-only ticket 2 scope. Full prompt/inspection/iteration/reference guidance retained."
+      "adaptation": "pi 适配：明确 CLI 选择与独立费用/网络/数据授权门、uv 固定依赖执行完整官方脚本、endpoint/Bearer 配置、mock/真实验收分离；CLI 默认未决。上游完整正文与不可变 snapshot 保留。"
     },
     {
       "path": "skills/imagegen/agents/openai.yaml",
@@ -313,8 +313,10 @@
     {
       "path": "skills/imagegen/references/cli.md",
       "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/cli.md",
-      "sha256": "ecfc2e09261a0feb3482517a5fa0ff410cb7d1958e3cbd2ac6b61586f5b81405",
-      "modified": false
+      "sha256": "8c6af1fd060e78564aae3de7e4b1c01a5180971d58631620fafa224e8f20530b",
+      "modified": true,
+      "modifiedOn": "2026-10-08",
+      "adaptation": "pi 适配：明确 CLI 选择与独立费用/网络/数据授权门、uv 固定依赖执行完整官方脚本、endpoint/Bearer 配置、mock/真实验收分离；CLI 默认未决。上游完整正文与不可变 snapshot 保留。"
     },
     {
       "path": "skills/imagegen/references/codex-network.md",

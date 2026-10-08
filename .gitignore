@@ -1,0 +1,18 @@
+# jj
+.jj/
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 依赖
+node_modules/
+.venv/
+
+# 生成产物
+.pi/images/
+generated_images/
+
+# macOS
+.DS_Store

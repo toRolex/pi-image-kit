@@ -15,7 +15,8 @@
     "scripts/run-image-cli.mjs",
     "LICENSE",
     "NOTICE",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "pi": {
     "extensions": [

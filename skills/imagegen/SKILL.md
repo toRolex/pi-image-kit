@@ -44,19 +44,20 @@ Rules:
 - Use the pi `image_generate` tool by default for normal image generation and editing requests.
 - Do not switch to CLI fallback for ordinary quality, size, or file-path control.
 - For transparent images, ask pi `image_generate` for a transparent background and preserve the generated alpha.
-- Never silently switch models or from pi `image_generate` to CLI `gpt-image-1.5`; ask the user first unless they explicitly requested `gpt-image-1.5`.
+- 指定任意模型都不等于选择 CLI；从 pi `image_generate` 改走 CLI 前，始终另获明确路线选择及费用、网络、数据授权。模型候选外策略仍待用户确认。
 - The word `batch` by itself does not mean CLI fallback. If the user asks for many assets or says to batch-generate assets without explicitly asking for CLI/API/model controls, stay on the built-in path and issue one built-in call per requested asset or variant.
 - If the built-in tool fails or is unavailable, tell the user the CLI fallback exists and that it requires `OPENAI_API_KEY`. Proceed only if the user explicitly asks for that fallback.
 - If the user explicitly asks for CLI mode, use the bundled `scripts/image_gen.py` workflow. Do not create one-off SDK runners.
 - Never modify `scripts/image_gen.py`. If something is missing, ask the user before doing anything else.
 
 Built-in save-path policy:
+- 交付时复制选定输出，保留受追踪原图及其路径/字节不变，供同会话 recent 续改；成功复制后再报告项目交付路径。不移动或删除受追踪原图，不静默改用预览。
 - In built-in tool mode, pi-image-kit saves generated images under `<cwd>/.pi/images/` by default.
 - Do not describe or rely on OS temp as the default built-in destination.
-- Do not describe or rely on a destination-path argument (if any) on the pi `image_generate` tool. If a specific location is needed, generate first and then move or copy the selected output from `<cwd>/.pi/images/...`.
+- Do not describe or rely on a destination-path argument (if any) on the pi `image_generate` tool. If a specific location is needed, generate first and then copy the selected output from `<cwd>/.pi/images/...`.
 - Save-path precedence in built-in mode:
-  1. If the user names a destination, move or copy the selected output there.
-  2. If the image is meant for the current project, move or copy the final selected image into the workspace before finishing.
+  1. If the user names a destination, copy the selected output there.
+  2. If the image is meant for the current project, copy the final selected image into the workspace before finishing.
   3. If the image is only for preview or brainstorming, render it inline; the underlying file can remain at the default `<cwd>/.pi/images/` path.
 - Never leave a project-referenced asset only at the default `<cwd>/.pi/images/` path.
 - Do not overwrite an existing asset unless the user explicitly asked for replacement; otherwise create a sibling versioned filename such as `hero-v2.png` or `item-icon-edited.png`.
@@ -130,7 +131,7 @@ Assume the user wants a new image unless they clearly ask to change an existing 
 12. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
 13. Iterate with a single targeted change, then re-check.
 14. For preview-only work, render the image inline; the underlying file may remain at the default `<cwd>/.pi/images/...` path.
-15. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `<cwd>/.pi/images/...` path.
+15. For project-bound work, copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `<cwd>/.pi/images/...` path.
 16. For batches or multi-asset requests, persist every requested deliverable final in the workspace unless the user explicitly asked to keep outputs preview-only. Discarded variants do not need to be kept unless requested.
 17. If the user explicitly chooses or confirms the CLI fallback, then use the fallback-only docs for model, quality, size, `input_fidelity`, masks, output format, output paths, and network setup.
 18. Always report the final saved path(s) for any workspace-bound asset(s), plus the final prompt or prompt set and whether the built-in tool or fallback CLI mode was used.

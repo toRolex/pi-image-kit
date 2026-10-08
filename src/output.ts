@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ImageResponse } from './images.ts';
+import { imageMime, type ImageResponse } from './images.ts';
 
 export interface ImageDetails {
   model: string;
@@ -19,10 +19,9 @@ function decodeFirst(response: ImageResponse): { data: string; bytes: Buffer; mi
   }
   const bytes = Buffer.from(data, 'base64');
   if (bytes.toString('base64') !== data) throw new Error('图像服务首项结果不是有效 base64 图片。');
-  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { data, bytes, mimeType: 'image/png', extension: 'png' };
-  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return { data, bytes, mimeType: 'image/jpeg', extension: 'jpg' };
-  if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return { data, bytes, mimeType: 'image/webp', extension: 'webp' };
-  throw new Error('图像服务首项结果不是可展示的 PNG、JPEG 或 WebP 图片。');
+  const mimeType = imageMime(bytes);
+  if (!mimeType) throw new Error('图像服务首项结果不是可展示的 PNG、JPEG 或 WebP 图片。');
+  return { data, bytes, mimeType, extension: { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[mimeType] };
 }
 
 // 生成与编辑共用结果出口；保存可选，保存失败不把已生成的图片变为工具失败。

@@ -4,10 +4,13 @@ Copyright 2026 rolex
 Public source and imagegen resources are preserved from OpenAI Codex 0.160.0,
 commit a956835d020762cb2b570053af06f643a11c0ecc, under Apache-2.0.
 The immutable originals are in vendor/codex-0.160.0/.
-Modified runtime file: skills/imagegen/SKILL.md (2026-10-08).
-It adapts pi tool/configuration/model routing/save paths and pending ticket scope;
-complete prompting, inspection, iteration and resource guidance is retained.
-Scripts, five references, agents, assets and LICENSE.txt remain unchanged.
+Modified runtime files (2026-10-08):
+- skills/imagegen/SKILL.md: pi tool/configuration/model routing/save paths,
+  explicit CLI consent and copy-only delivery preserving tracked originals.
+- skills/imagegen/references/cli.md: explicit CLI selection, independent
+  network/data/cost authorization and uv-managed execution of the full script.
+Complete prompting, inspection, iteration and resource guidance is retained.
+Scripts, the other four references, agents, assets and LICENSE.txt remain unchanged.
 Detailed source URLs, hashes and adaptation records: resources.json.
 Rust source is retained for audit, not used as the pi runtime. No official
 OpenAI or pi endorsement is claimed. Baseline updates require review.

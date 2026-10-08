@@ -5,6 +5,14 @@ import type { ImageKitConfig } from './config.ts';
 
 export interface ImageReference { image_url: string }
 
+// 仅识别格式签名，不代表完整解码；参考图仍须通过下方解码校验。
+export function imageMime(bytes: Buffer): 'image/png' | 'image/jpeg' | 'image/webp' | undefined {
+  if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png';
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg';
+  if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  return undefined;
+}
+
 // 对照固定 Codex 的 Original：按内容解码验证，不缩放；PNG/JPEG/WebP 保留原字节，其余转 PNG。
 export async function readImageReferences(paths: string[]): Promise<ImageReference[]> {
   const images: ImageReference[] = [];
@@ -17,10 +25,7 @@ export async function readImageReferences(paths: string[]): Promise<ImageReferen
     // 不传 image/png，避免宿主 PNG 快捷分支跳过解码校验；转换函数不缩放。
     const decoded = await convertToPng(data, 'application/octet-stream');
     if (!decoded) throw new Error('参考文件无法解码为图片；本次未发送请求。');
-    let mime: string | undefined;
-    if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) mime = 'image/png';
-    else if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) mime = 'image/jpeg';
-    else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') mime = 'image/webp';
+    const mime = imageMime(bytes);
     const image = mime ? { mimeType: mime, data } : decoded;
     images.push({ image_url: `data:${image.mimeType};base64,${image.data}` });
   }
@@ -69,8 +74,7 @@ export async function requestImage(
   } catch {
     throw requestError(timeout, signal, '图像服务网络请求失败；未切换模型、认证或 CLI。');
   }
-  // A service may echo the Bearer key or private endpoint in its body. Neither
-  // external error text nor fetch exception text crosses the session boundary.
+  // 服务可能回显 Bearer key 或私有 endpoint；响应错误正文与 fetch 异常原文不进入会话。
   if (!response.ok) throw new Error(`图像服务返回 HTTP ${response.status}；未切换模型、认证或 CLI。`);
   try {
     return await response.json() as ImageResponse;

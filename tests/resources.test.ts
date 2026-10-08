@@ -15,6 +15,28 @@ test('public package resource audit verifies the complete fixed snapshot and all
   assert.match(result.stdout, /29 upstream files; 12 runtime resources/);
 });
 
+test('运行 skill 的任意模型选择都须另获 CLI 授权', async () => {
+  const skill = await readFile(join(root, 'skills/imagegen/SKILL.md'), 'utf8');
+  assert.doesNotMatch(skill, /unless they explicitly requested `gpt-image-1\.5`/);
+  assert.match(skill, /指定任意模型都不等于选择 CLI/);
+});
+
+test('交付指导只复制并保留 recent 受追踪原图', async () => {
+  const skill = await readFile(join(root, 'skills/imagegen/SKILL.md'), 'utf8');
+  assert.doesNotMatch(skill, /move or copy/);
+  assert.match(skill, /保留受追踪原图/);
+});
+
+test('NOTICE 与资源 manifest 的 modified 文件一致', async () => {
+  const notice = await readFile(join(root, 'NOTICE'), 'utf8');
+  const manifest = JSON.parse(await readFile(join(root, 'resources.json'), 'utf8'));
+  for (const entry of manifest.runtime.filter((entry: { modified: boolean }) => entry.modified)) {
+    assert.ok(notice.includes(entry.path), `NOTICE 未记录 ${entry.path}`);
+  }
+  assert.match(notice, /other four references.*remain unchanged/);
+  assert.doesNotMatch(notice, /five references.*remain unchanged/);
+});
+
 test('public audit detects a missing resource, snapshot byte changes, unmarked adaptation, and unexpected files', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'image-kit-audit-'));
   try {

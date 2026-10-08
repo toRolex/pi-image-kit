@@ -62,9 +62,11 @@ pnpm test
 PI_IMAGE_KIT_LEGACY_SEARCH_SOURCE=/absolute/path/to/public/pi-tool-search/src/extension.ts pnpm test
 ```
 
-公共资源审计 command 检查完整清单、hash、Git blob 与 modified 标识；测试实际破坏临时副本，验证缺件、快照改动、未标记修改和意外文件会失败。开发依赖按锁文件安装。本机 fresh install 当前被 pi 1.1.0 的 minimum-release-age 策略与未批准 dependency build scripts 阻塞；机器生成的 age-exclude 配置不入库，不擅自批准/绕过。#4 合入 #5 后，已安装依赖下完整测试 78/78（含旧部署专项）、typecheck、资源审计通过；这不代表 fresh install 策略通过。#5 并行验收曾出现既有 30ms timeout 测试 flake，本次全套通过不表示该问题已解决。
+公共资源审计 command 检查完整清单、hash、Git blob 与 modified 标识；测试实际破坏临时副本，验证缺件、快照改动、未标记修改和意外文件会失败。开发依赖按锁文件安装。本机 fresh install 当前被 pi 1.1.0 的 minimum-release-age 策略与未批准 dependency build scripts 阻塞；机器生成的 age-exclude 配置不入库，不擅自批准/绕过。#4 合入 #5 时，已有依赖下曾完整测试 78/78（含旧部署专项）通过；不代表 fresh install 策略通过。review 修复后，直接 `node --import tsx --test tests/*.test.ts` 默认并行全套 **81 通过、0 失败、1 skip**（未设置旧搜索源码），旧搜索专项另跑 **1/1**；typecheck、29 snapshot / 12 runtime 资源审计通过。既有 30ms timeout flake 已修复：review 六 worker 曾复现 30 项中 7 失败；现在请求头挂起用 500ms，并区分连接前 abort（0 请求）与已到达（最多 1 请求），响应体挂起用 1000ms、显式 flush headers 并核对场景已到达。相同六 worker 复核 **30/30** 通过，保持 timeout、不重试和不 fallback；不是生产超时实现损坏或无限调大 deadline 的结论。
 
 ## 已验收与未验收
+
+默认 tool 防 CLI 回退测试同时隔离 `process.cwd()` 与 `PI_CODING_AGENT_DIR`，检查 loader errors；只用测试自建无效全局/项目配置验证污染不会进入隔离会话，不读取真实个人配置。新增 skill 一致性回归确认任意模型选择均不是 CLI 授权、交付只 copy 并保留受追踪原图；公开 session 验证“生成→copy 项目交付→recent”仍发送原图而非缩放预览。
 
 最高层公开 seam：隔离 `createAgentSession` + 标准 package/resource loader + `session.prompt()` + 内存 session/credentials/settings + 公开 scripted provider + localhost fake Images HTTP。真实走发现、schema、HTTP、会话输出与图片 normalize；只替代外部 LLM 和 Images 服务，不 mock 内部实现。
 

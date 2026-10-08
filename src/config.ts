@@ -17,7 +17,7 @@ async function readConfig(path: string): Promise<Record<string, unknown>> {
     return value as Record<string, unknown>;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    // Never interpolate parser errors, paths, or file contents: they may contain keys.
+    // 解析异常、路径与文件内容可能包含密钥，不能插入错误消息。
     throw new Error('image-kit 配置不可读取或不是有效 JSON 对象。');
   }
 }
@@ -60,8 +60,7 @@ export async function loadConfig(cwd: string): Promise<ImageKitConfig> {
   };
 }
 
-// Loading a package must not require credentials. Only the optional exposure is
-// read during registration; full service configuration is checked on execution.
+// 加载包无需凭据；注册仅读取可选 exposure，执行时才检查完整服务配置。
 export async function loadExposure(cwd: string): Promise<'direct' | 'deferred'> {
   const value = await readMergedConfig(cwd);
   return parseExposure(value.exposure);

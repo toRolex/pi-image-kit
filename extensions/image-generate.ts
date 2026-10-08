@@ -3,7 +3,6 @@ import { loadExposure } from '../src/config.ts';
 import { createImageTool } from '../src/tool.ts';
 
 export default async function imageKit(pi: ExtensionAPI): Promise<void> {
-  // Register exactly once. pi owns package path de-duplication and tool conflicts;
-  // do not pretend a process-wide flag can dedupe another legacy implementation.
+  // 只注册一次；包路径去重与工具冲突由 pi 处理，进程标志不能去重另一个旧实现。
   pi.registerTool(createImageTool(await loadExposure(process.cwd())));
 }

@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createToolSearchExtension, convertToPng } from '@earendil-works/pi-coding-agent';
 import { createAssistantMessageEventStream, InMemoryCredentialStore, type AssistantMessage, type ToolCall, type JsonObject } from '@earendil-works/pi-ai';
 
-// Public session seam. The scripted provider replaces only the external LLM;
-// package discovery, schemas, tool execution, HTTP, and session history are real.
+// 公开会话边界：脚本化 provider 只替代外部 LLM；包发现、schema、工具执行、HTTP 与历史均真实。
 const root = resolve(import.meta.dirname, '..');
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jxioAAAAASUVORK5CYII=';
 // 原有输出样本仅检验结果契约；输入样本必须能完整解码。
@@ -37,6 +36,7 @@ interface Scenario {
 async function run(scenario: Scenario = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'image-kit-test-'));
   const requests: { path: string; authorization?: string; body: unknown }[] = [];
+  let bodyHung = false;
   const server = createServer(async (req, res) => {
     let data = '';
     for await (const chunk of req) data += chunk;
@@ -44,7 +44,7 @@ async function run(scenario: Scenario = {}) {
     if (scenario.delay) return;
     const edit = req.url?.endsWith('/edits');
     res.writeHead((edit ? scenario.editStatus : undefined) ?? scenario.status ?? 200, { 'Content-Type': 'application/json' });
-    if (scenario.bodyDelay) { res.flushHeaders(); return; }
+    if (scenario.bodyDelay) { res.flushHeaders(); bodyHung = true; return; }
     const generated = scenario.generations?.[requests.length - 1] ?? png;
     const body = edit && scenario.editBody !== undefined ? scenario.editBody : scenario.body;
     res.end(JSON.stringify(body === undefined ? { data: [{ b64_json: generated }, { b64_json: 'ignored' }], background: 'transparent' } : body));
@@ -61,8 +61,7 @@ async function run(scenario: Scenario = {}) {
   const legacyAdapter = join(dir, 'legacy-search.ts');
   if (legacy) {
     await writeFile(legacyConfig, '[tools]\ndeferred = ["image_generate"]\n');
-    // Use the real pi extension loader, including its host module mapping.
-    // Native Node import would resolve the deployed package's stale peer tree.
+    // 使用真实 pi extension loader 及宿主模块映射，避免 Node 原生导入解析到旧 peer 依赖树。
     await writeFile(legacyAdapter, `import { createToolSearchExtension } from ${JSON.stringify(legacy)}; export default (pi) => createToolSearchExtension(pi, ${JSON.stringify(legacyConfig)});`);
   }
   const settings = SettingsManager.inMemory({ packages: [root, root], defaultTools: legacy ? ['tool_search', 'image_generate'] : scenario.searches ? ['tool_search'] : ['image_generate'], retry: { enabled: false }, compaction: { enabled: false } });
@@ -111,7 +110,7 @@ async function run(scenario: Scenario = {}) {
     await session.prompt(scenario.generations?.length ? '请修改最近的会话图片；按要求的模型，不要使用 CLI。' : '请生成透明蓝点；按要求的模型，不要使用 CLI。');
     const messages = session.messages;
     const result = messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'generate');
-    return { requests, messages, result, initiallyActive, finallyActive: session.getActiveToolNames(), tools: session.getAllTools(), skills: loader.getSkills(), errors: extensionsResult.errors, modelInputs, dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
+    return { requests, bodyHung, messages, result, initiallyActive, finallyActive: session.getActiveToolNames(), tools: session.getAllTools(), skills: loader.getSkills(), errors: extensionsResult.errors, modelInputs, dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
   } catch (error) {
     await rm(dir, { recursive: true, force: true });
     throw error;
@@ -164,6 +163,30 @@ test('先生成并经 pi 缩放预览，再 recent1 编辑真正的原图', asyn
     assert.deepEqual(value.requests[1], { path: '/v1/images/edits', authorization: `Bearer ${secret}`, body: { prompt: '修改最近图片，保留原尺寸', model: 'gpt-image-2', background: 'transparent', quality: 'auto', size: 'auto', images: [{ image_url: `data:image/png;base64,${original.data}` }] } });
     assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
     assert.ok(value.result.content.some((c) => c.type === 'image' && c.data === png));
+  } finally { await value.cleanup(); }
+});
+
+test('公开会话生成→copy 项目交付→recent 使用受追踪原图而非缩放预览', async () => {
+  const original = await convertToPng(wideBmp(60).toString('base64'), 'image/bmp');
+  assert.ok(original);
+  let trackedPath = '';
+  let deliveredPath = '';
+  const value = await run({ generations: [original.data], args: { prompt: '续改交付图片', num_last_images_to_include: 1 }, beforeRecent(manager) {
+    const entry = manager.getBranch().find((e) => e.type === 'message' && e.message.role === 'toolResult' && e.message.toolCallId === 'prior-0');
+    assert.ok(entry?.type === 'message' && entry.message.role === 'toolResult');
+    trackedPath = (entry.message.details as { original: { path: string } }).original.path;
+    deliveredPath = join(manager.getCwd(), 'project-final.png');
+    copyFileSync(trackedPath, deliveredPath);
+  } });
+  try {
+    assert.deepEqual(value.errors, []);
+    assert.equal(value.requests.length, 2);
+    assert.deepEqual(await readFile(deliveredPath), Buffer.from(original.data, 'base64'));
+    assert.deepEqual(await readFile(trackedPath), Buffer.from(original.data, 'base64'));
+    const prior = value.messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'prior-0');
+    assert.ok(prior?.role === 'toolResult' && prior.content.some((c) => c.type === 'image' && c.data !== original.data));
+    assert.deepEqual((value.requests[1].body as { images: unknown }).images, [{ image_url: `data:image/png;base64,${original.data}` }]);
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
   } finally { await value.cleanup(); }
 });
 
@@ -428,7 +451,7 @@ test('saving can be disabled without warnings; unknown transparent support remai
 
 for (const scenario of [
   { name: '401 echoing a secret', status: 401, body: { error: `Bearer ${secret}`, privateUrl: 'https://private.invalid/service' }, error: /HTTP 401/ },
-  { name: 'timeout waiting for headers', delay: true, config: { timeoutMs: 30 }, error: /超时/ },
+  { name: 'timeout waiting for headers', delay: true, config: { timeoutMs: 500 }, error: /超时/ },
   { name: 'empty response data', body: { data: [] }, error: /首项结果/ },
   { name: 'unusable first item with a valid later image', body: { data: [{ url: `https://private.invalid/${secret}` }, { b64_json: png }] }, error: /首项结果/ },
   { name: 'non-image base64 first item', body: { data: [{ b64_json: Buffer.from(secret).toString('base64') }] }, error: /不是可展示/ },
@@ -437,7 +460,9 @@ for (const scenario of [
   test(`${scenario.name} is a visible error, does not retry or fall back, and never leaks dummy credentials`, async () => {
     const value = await run(scenario);
     try {
-      assert.equal(value.requests.length, 1);
+      // 计时包含连接阶段：header 超时可发生在请求到达前；到达后服务明确挂起，均不重试。
+      if ('delay' in scenario) assert.ok(value.requests.length <= 1);
+      else assert.equal(value.requests.length, 1);
       assert.ok(value.result?.role === 'toolResult');
       assert.equal(value.result.isError, true);
       assert.ok(!value.result.content.some((c) => c.type === 'image'));
@@ -533,16 +558,20 @@ test('路径编辑落盘失败仍显示首图和 warning，不改取后续项', 
 
 for (const scenario of [
   { status: 401, body: { error: secret }, error: /HTTP 401/ },
-  { delay: true, config: { timeoutMs: 30 }, error: /超时/ },
+  { delay: true, config: { timeoutMs: 500 }, error: /超时/ },
   { body: { data: [{ url: 'https://private.invalid/image' }, { b64_json: png }] }, error: /首项结果/ },
 ]) {
   test('路径编辑服务失败明确返回错误，不转 generation/模型/认证/CLI', async () => {
     const value = await run({ ...scenario, references: [{ name: 'input.png', bytes: Buffer.from(referencePng, 'base64') }] });
     try {
-      assert.equal(value.requests.length, 1);
-      assert.equal(value.requests[0].path, '/v1/images/edits');
-      assert.equal(value.requests[0].authorization, `Bearer ${secret}`);
-      assert.equal((value.requests[0].body as { model: string }).model, 'gpt-image-2.5');
+      if ('delay' in scenario) assert.ok(value.requests.length <= 1);
+      else assert.equal(value.requests.length, 1);
+      // 连接前 abort 没有可核对的服务请求；到达后的请求仍须保留路线、认证与模型。
+      for (const request of value.requests) {
+        assert.equal(request.path, '/v1/images/edits');
+        assert.equal(request.authorization, `Bearer ${secret}`);
+        assert.equal((request.body as { model: string }).model, 'gpt-image-2.5');
+      }
       assert.ok(value.result?.role === 'toolResult' && value.result.isError);
       assert.match(JSON.stringify(value.result), scenario.error);
       assert.ok(!value.result.content.some((c) => c.type === 'image'));
@@ -571,10 +600,18 @@ test('malformed configuration does not expose parser contents or dummy secret in
 });
 
 test('timeout while reading response body is reported as timeout without leaked service text', async () => {
-  const value = await run({ bodyDelay: true, config: { timeoutMs: 30 } });
+  const value = await run({ bodyDelay: true, config: { timeoutMs: 1000 } });
   try {
+    // 响应头已显式 flush，才算覆盖响应体挂起；不能用连接前超时冒充这个场景。
+    assert.equal(value.bodyHung, true);
+    assert.deepEqual(value.errors, []);
     assert.equal(value.requests.length, 1);
-    assert.equal(value.result?.role === 'toolResult' && value.result.isError, true);
+    assert.equal(value.requests[0].path, '/v1/images/generations');
+    assert.equal(value.requests[0].authorization, `Bearer ${secret}`);
+    assert.equal((value.requests[0].body as { model: string }).model, 'gpt-image-2.5');
+    assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+    assert.ok(!value.result.content.some((c) => c.type === 'image'));
+    assert.deepEqual(value.messages.filter((m) => m.role === 'toolResult').map((m) => m.role === 'toolResult' && m.toolName), ['image_generate']);
     assert.match(JSON.stringify(value.result), /超时/);
     assert.ok(!JSON.stringify({ messages: value.messages, errors: value.errors, modelInputs: value.modelInputs }).includes(secret));
   } finally { await value.cleanup(); }

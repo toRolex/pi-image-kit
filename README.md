@@ -74,7 +74,7 @@ mock 覆盖四模型显式选择、默认与 agent 依据、透明参数、首�
 
 ## 后续公共 seam 与范围
 
-- `src/tool.ts` 的 `createImageTool()`：唯一入口；#3 增路径引用，#4 增 recent。当前明确仅新图，未知编辑字段 schema 拒绝，绝不把编辑误做生成。
+- `src/tool.ts` 的 `createImageTool()`：唯一入口，支持新图及 #3 绝对路径编辑。例如“修改 `/绝对路径/图片.png`，背景透明”：传 `prompt`、`referenced_image_paths: ["/绝对路径/图片.png"]`、`transparent_background: true`；最多五张，按输入顺序发送官方 JSON `images/edits`。按文件内容解码且不缩放，PNG/JPEG/WebP 保留原字节，其余可解码格式转 PNG；相对路径、不可读取/解码、超量及与 recent 冲突均不发请求。无引用或空路径数组保持 generation。`num_last_images_to_include` 仅校验一至五与冲突，取会话原图等待 #4，不降级生成。#3 mock 经公开 session/fake HTTP 验证；真实 JSON edits 兼容与透明效果未验证。
 - `src/config.ts` 的 `loadConfig()`：共同配置与认证；`requestImage()`：JSON `generations`/`edits` 共享传输，没有 multipart 或 CLI fallback。
 - `src/output.ts` 的 `imageOutput()`：统一第一项 image content、保存与 warning。`details.original` 标记本包 source/version、MIME、SHA256，成功保存时是原图路径，失败/禁用保存时留原始 base64；#4 应验证 provenance/hash 并从公开 session branch 取自产原图，而非把 pi 缩放预览当原图。自动 normalize 保留 details；任意其它扩展仍可能替换 details，不承诺通用宿主保证。
 - #5 已实现明确选择 CLI 门与 localhost 完整脚本闭环，详见下节。原脚本默认 `gpt-image-2` 未修改，不表示 pi CLI 默认决策已定。
@@ -92,8 +92,12 @@ node /absolute/package/scripts/run-image-cli.mjs --choose-cli --allow-network-da
   --quality high --out output/imagegen/dot.png
 ```
 
-入口用 uv 管理 `openai==2.30.0`、`pillow==12.1.0`，直接执行固定 Codex **0.160.0 / a956835d020762cb2b570053af06f643a11c0ecc** 的完整官方 `image_gen.py`，未修改脚本；支持原有 generate/edit/generate-batch、model/mask/quality/n/size 等参数。endpoint 与 Bearer 由受控子进程环境注入，无 ChatGPT 登录。不会继承个人 OpenAI/代理配置；失败不会启动其它 CLI、换模型或认证。完整上游 chroma helper 仍保留，未自动使用。
+入口用 uv 管理 `openai==2.30.0`、`pillow==12.1.0`，直接执行固定 Codex **0.160.0 / a956835d020762cb2b570053af06f643a11c0ecc** 的完整官方 `image_gen.py`，未修改脚本；支持原有 generate/edit/generate-batch、model/mask/quality/n/size 等参数。endpoint 与 Bearer 由受控子进程环境注入，无 ChatGPT 登录。命令入口不继承个人 OpenAI/代理配置；程序调用的 `environment` 由调用方显式提供，不能视为任意调用方都自动隔离。失败不会启动其它 CLI、换模型或认证。完整上游 chroma helper 仍保留，未自动使用。
 
 `tests/cli.test.ts` 实际运行脚本，通过 localhost fake Images 服务验收生成、独立显式 `gpt-image-2.5-sunburst`、`gpt-image-2.5` mask 编辑、`gpt-image-2.5-flare` 双任务异步 batch，检查质量、Bearer、模型 ID、真实 PNG 输出字节。测试隔离 HOME、dummy key 与环境，只发送公共合成样本；通过 uv 公共 PyPI 下载依赖，缓存为临时目录。此为 mock 服务验收，不是只检查 help/解析；不证明真网关 multipart/透明或默认 tool JSON edits 兼容。测试不省略 Python 闭环，依赖下载失败明确失败。
+
+本票还验证直接/符号链接入口、两项独立授权、缺失配置、污染父环境、size/n 透传及 CLI 401 不换模型/认证/路线；`tests/cli-no-fallback.test.ts` 用真实公开 session 与 PATH uv 哨兵验证默认 tool 失败、批量、显式 model 都不启动 CLI。scripted provider 不等于真实 LLM 自主理解。
+
+2026-10-08 合入 #3 integration `361fecc37519044f4ddf02cc6bacb3e52bb94f7e` 后验收：串行全套 **56 通过、0 失败、1 skip**（未配置旧部署源码专项）；typecheck、29 snapshot / 12 runtime 资源审计通过。合入前一次并行全测因既有 30ms timeout 未捕获请求失败，串行复测通过，未修改共享测试或 timeout。pnpm scripts 前置安装仍报 release-age 策略阻塞；实际脚本可在已有依赖运行，不算 fresh 安装通过。
 
 **真实 CLI API 验收未执行，不算通过。** CLI 默认是否改为 2.5 仍未决，保留官方 `gpt-image-2`/`medium` 不等于策略定案；真实费用/网络/数据授权未取得。Context7 本次 resolve 失败（fetch failed），依据固定官方源码记录，不声称 online query 成功。fresh Node 安装仍未验收，使用已有 ignored 依赖链接，不绕过 pnpm age/build 策略。

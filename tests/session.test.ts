@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { copyFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createToolSearchExtension, convertToPng } from '@earendil-works/pi-coding-agent';
@@ -31,97 +31,152 @@ interface Scenario {
   beforeRecent?: (manager: SessionManager) => void;
   editStatus?: number;
   editBody?: unknown;
+  // 只用于初始化失败回归，不替代 SDK/loader 或请求行为。
+  onSetup?: (phase: 'server' | 'loader' | 'session', dir: string, server: Server) => void;
 }
 
 async function run(scenario: Scenario = {}) {
-  const dir = await mkdtemp(join(tmpdir(), 'image-kit-test-'));
-  const requests: { path: string; authorization?: string; body: unknown }[] = [];
-  let bodyHung = false;
-  const server = createServer(async (req, res) => {
-    let data = '';
-    for await (const chunk of req) data += chunk;
-    requests.push({ path: req.url!, authorization: req.headers.authorization, body: JSON.parse(data) });
-    if (scenario.delay) return;
-    const edit = req.url?.endsWith('/edits');
-    res.writeHead((edit ? scenario.editStatus : undefined) ?? scenario.status ?? 200, { 'Content-Type': 'application/json' });
-    if (scenario.bodyDelay) { res.flushHeaders(); bodyHung = true; return; }
-    const generated = scenario.generations?.[requests.length - 1] ?? png;
-    const body = edit && scenario.editBody !== undefined ? scenario.editBody : scenario.body;
-    res.end(JSON.stringify(body === undefined ? { data: [{ b64_json: generated }, { b64_json: 'ignored' }], background: 'transparent' } : body));
-  });
-  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
-  server.unref();
-  const address = server.address() as { port: number };
-  await mkdir(join(dir, '.pi'));
-  if (scenario.saveFailure) await writeFile(join(dir, 'blocked'), 'not a directory');
-  await writeFile(join(dir, '.pi', 'image-kit.json'), scenario.rawConfig ?? JSON.stringify({ endpoint: `http://127.0.0.1:${address.port}/v1`, apiKey: secret, ...(scenario.saveFailure ? { saveDirectory: join(dir, 'blocked') } : {}), ...scenario.config }));
-  await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-  const legacy = scenario.legacySearch;
-  const legacyConfig = join(dir, 'tool-search.toml');
-  const legacyAdapter = join(dir, 'legacy-search.ts');
-  if (legacy) {
-    await writeFile(legacyConfig, '[tools]\ndeferred = ["image_generate"]\n');
-    // 使用真实 pi extension loader 及宿主模块映射，避免 Node 原生导入解析到旧 peer 依赖树。
-    await writeFile(legacyAdapter, `import { createToolSearchExtension } from ${JSON.stringify(legacy)}; export default (pi) => createToolSearchExtension(pi, ${JSON.stringify(legacyConfig)});`);
-  }
-  const settings = SettingsManager.inMemory({ packages: [root, root], defaultTools: legacy ? ['tool_search', 'image_generate'] : scenario.searches ? ['tool_search'] : ['image_generate'], retry: { enabled: false }, compaction: { enabled: false } });
-  const loader = new DefaultResourceLoader({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, noContextFiles: true, noPromptTemplates: true, noThemes: true, disabledBuiltinExtensions: ['mcp'], additionalExtensionPaths: legacy ? [legacyAdapter] : [], extensionFactories: !legacy && scenario.searches ? [createToolSearchExtension()] : [] });
-  const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, modelsStorePath: join(dir, 'models.json'), refreshOnCreate: false, allowModelNetwork: false });
-  const paths: string[] = [];
-  for (const reference of scenario.references ?? []) {
-    const path = join(dir, reference.name);
-    await writeFile(path, reference.bytes);
-    paths.push(path);
-  }
-  const calls: ToolCall[] = [
-    ...(scenario.generations ?? []).map((_, i) => ({ type: 'toolCall' as const, id: `prior-${i}`, name: 'image_generate', arguments: { prompt: `生成第 ${i + 1} 张图` } })),
-    ...Array.from({ length: scenario.searches ?? 0 }, (_, i) => ({ type: 'toolCall' as const, id: `search-${i}`, name: 'tool_search', arguments: { query: legacy && i > 0 ? 'select:image_generate' : 'image generation transparent', limit: 1 } })),
-    { type: 'toolCall', id: 'generate', name: 'image_generate', arguments: scenario.references ? { prompt: '保留蓝点，移除背景', referenced_image_paths: paths, ...scenario.referenceArgs } : scenario.args ?? { prompt: 'A tiny transparent blue dot', transparent_background: true } },
-  ];
-  const sessionManager = SessionManager.inMemory(dir);
-  let step = 0;
-  let historyComplete = !scenario.generations?.length;
-  const modelInputs: unknown[] = [];
-  runtime.registerProvider('image-kit-fake', {
-    api: 'image-kit-fake', apiKey: 'dummy-llm', baseUrl: 'http://127.0.0.1/never-called',
-    models: [{ id: 'scripted', name: 'Scripted test LLM', reasoning: false, input: ['text', 'image'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100000, maxTokens: 1024 }],
-    streamSimple(model, context) {
-      modelInputs.push(context);
-      let call: ToolCall | undefined;
-      if (!historyComplete && step === scenario.generations!.length) historyComplete = true;
-      else call = calls[step++];
-      if (call?.id === 'generate') scenario.beforeRecent?.(sessionManager);
-      const message: AssistantMessage = { role: 'assistant', api: model.api, provider: model.provider, model: model.id, content: call ? [call] : [{ type: 'text', text: 'Done' }], stopReason: call ? 'toolUse' : 'stop', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, timestamp: Date.now() };
-      const stream = createAssistantMessageEventStream();
-      stream.push({ type: 'done', reason: message.stopReason as 'toolUse' | 'stop', message });
-      return stream;
-    },
-  });
   const oldCwd = process.cwd();
   const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
-  process.chdir(dir);
-  process.env.PI_CODING_AGENT_DIR = join(dir, 'agent');
-  await loader.reload();
-  const { session, extensionsResult } = await createAgentSession({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, sessionManager, modelRuntime: runtime, model: runtime.getModel('image-kit-fake', 'scripted')!, resourceLoader: loader });
+  let fixture: string | undefined;
+  let server: Server | undefined;
+  let session: Awaited<ReturnType<typeof createAgentSession>>['session'] | undefined;
+  let completed = false;
   try {
+    const dir = await mkdtemp(join(tmpdir(), 'image-kit-test-'));
+    fixture = dir;
+    const requests: { path: string; authorization?: string; body: unknown }[] = [];
+    let bodyHung = false;
+    const activeServer = server = createServer(async (req, res) => {
+      let data = '';
+      for await (const chunk of req) data += chunk;
+      requests.push({ path: req.url!, authorization: req.headers.authorization, body: JSON.parse(data) });
+      if (scenario.delay) return;
+      const edit = req.url?.endsWith('/edits');
+      res.writeHead((edit ? scenario.editStatus : undefined) ?? scenario.status ?? 200, { 'Content-Type': 'application/json' });
+      if (scenario.bodyDelay) { res.flushHeaders(); bodyHung = true; return; }
+      const generated = scenario.generations?.[requests.length - 1] ?? png;
+      const body = edit && scenario.editBody !== undefined ? scenario.editBody : scenario.body;
+      res.end(JSON.stringify(body === undefined ? { data: [{ b64_json: generated }, { b64_json: 'ignored' }], background: 'transparent' } : body));
+    });
+    await new Promise<void>((done, reject) => {
+      activeServer.once('error', reject);
+      activeServer.listen(0, '127.0.0.1', () => {
+        activeServer.off('error', reject);
+        done();
+      });
+    });
+    activeServer.unref();
+    scenario.onSetup?.('server', dir, activeServer);
+    const address = activeServer.address() as { port: number };
+    await mkdir(join(dir, '.pi'));
+    if (scenario.saveFailure) await writeFile(join(dir, 'blocked'), 'not a directory');
+    await writeFile(join(dir, '.pi', 'image-kit.json'), scenario.rawConfig ?? JSON.stringify({ endpoint: `http://127.0.0.1:${address.port}/v1`, apiKey: secret, ...(scenario.saveFailure ? { saveDirectory: join(dir, 'blocked') } : {}), ...scenario.config }));
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
+    const legacy = scenario.legacySearch;
+    const legacyConfig = join(dir, 'tool-search.toml');
+    const legacyAdapter = join(dir, 'legacy-search.ts');
+    if (legacy) {
+      await writeFile(legacyConfig, '[tools]\ndeferred = ["image_generate"]\n');
+      // 使用真实 pi extension loader 及宿主模块映射，避免 Node 原生导入解析到旧 peer 依赖树。
+      await writeFile(legacyAdapter, `import { createToolSearchExtension } from ${JSON.stringify(legacy)}; export default (pi) => createToolSearchExtension(pi, ${JSON.stringify(legacyConfig)});`);
+    }
+    const settings = SettingsManager.inMemory({ packages: [root, root], defaultTools: legacy ? ['tool_search', 'image_generate'] : scenario.searches ? ['tool_search'] : ['image_generate'], retry: { enabled: false }, compaction: { enabled: false } });
+    const loader = new DefaultResourceLoader({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, noContextFiles: true, noPromptTemplates: true, noThemes: true, disabledBuiltinExtensions: ['mcp'], additionalExtensionPaths: legacy ? [legacyAdapter] : [], extensionFactories: !legacy && scenario.searches ? [createToolSearchExtension()] : [] });
+    const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, modelsStorePath: join(dir, 'models.json'), refreshOnCreate: false, allowModelNetwork: false });
+    const paths: string[] = [];
+    for (const reference of scenario.references ?? []) {
+      const path = join(dir, reference.name);
+      await writeFile(path, reference.bytes);
+      paths.push(path);
+    }
+    const calls: ToolCall[] = [
+      ...(scenario.generations ?? []).map((_, i) => ({ type: 'toolCall' as const, id: `prior-${i}`, name: 'image_generate', arguments: { prompt: `生成第 ${i + 1} 张图` } })),
+      ...Array.from({ length: scenario.searches ?? 0 }, (_, i) => ({ type: 'toolCall' as const, id: `search-${i}`, name: 'tool_search', arguments: { query: legacy && i > 0 ? 'select:image_generate' : 'image generation transparent', limit: 1 } })),
+      { type: 'toolCall', id: 'generate', name: 'image_generate', arguments: scenario.references ? { prompt: '保留蓝点，移除背景', referenced_image_paths: paths, ...scenario.referenceArgs } : scenario.args ?? { prompt: 'A tiny transparent blue dot', transparent_background: true } },
+    ];
+    const sessionManager = SessionManager.inMemory(dir);
+    let step = 0;
+    let historyComplete = !scenario.generations?.length;
+    const modelInputs: unknown[] = [];
+    runtime.registerProvider('image-kit-fake', {
+      api: 'image-kit-fake', apiKey: 'dummy-llm', baseUrl: 'http://127.0.0.1/never-called',
+      models: [{ id: 'scripted', name: 'Scripted test LLM', reasoning: false, input: ['text', 'image'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100000, maxTokens: 1024 }],
+      streamSimple(model, context) {
+        modelInputs.push(context);
+        let call: ToolCall | undefined;
+        if (!historyComplete && step === scenario.generations!.length) historyComplete = true;
+        else call = calls[step++];
+        if (call?.id === 'generate') scenario.beforeRecent?.(sessionManager);
+        const message: AssistantMessage = { role: 'assistant', api: model.api, provider: model.provider, model: model.id, content: call ? [call] : [{ type: 'text', text: 'Done' }], stopReason: call ? 'toolUse' : 'stop', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, timestamp: Date.now() };
+        const stream = createAssistantMessageEventStream();
+        stream.push({ type: 'done', reason: message.stopReason as 'toolUse' | 'stop', message });
+        return stream;
+      },
+    });
+    process.chdir(dir);
+    process.env.PI_CODING_AGENT_DIR = join(dir, 'agent');
+    scenario.onSetup?.('loader', dir, server);
+    await loader.reload();
+    scenario.onSetup?.('session', dir, server);
+    const created = await createAgentSession({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, sessionManager, modelRuntime: runtime, model: runtime.getModel('image-kit-fake', 'scripted')!, resourceLoader: loader });
+    session = created.session;
+    const extensionsResult = created.extensionsResult;
     await session.bindExtensions({});
     const initiallyActive = session.getActiveToolNames();
     if (scenario.generations?.length) await session.prompt(`请先生成 ${scenario.generations.length} 张会话图片。`);
     await session.prompt(scenario.generations?.length ? '请修改最近的会话图片；按要求的模型，不要使用 CLI。' : '请生成透明蓝点；按要求的模型，不要使用 CLI。');
     const messages = session.messages;
     const result = messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'generate');
+    completed = true;
     return { requests, bodyHung, messages, result, initiallyActive, finallyActive: session.getActiveToolNames(), tools: session.getAllTools(), skills: loader.getSkills(), errors: extensionsResult.errors, modelInputs, dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
-  } catch (error) {
-    await rm(dir, { recursive: true, force: true });
-    throw error;
   } finally {
-    session.dispose();
-    process.chdir(oldCwd);
-    if (oldAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
-    else process.env.PI_CODING_AGENT_DIR = oldAgentDir;
-    server.closeAllConnections();
-    await new Promise<void>((done) => server.close(() => done()));
+    // 尚未创建 session 或尚未 listen 的失败分支，也必须恢复环境与已建资源。
+    try { session?.dispose(); }
+    finally {
+      if (oldAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = oldAgentDir;
+      process.chdir(oldCwd);
+      if (server?.listening) {
+        server.closeAllConnections();
+        await new Promise<void>((done) => server!.close(() => done()));
+      }
+      if (!completed && fixture) await rm(fixture, { recursive: true, force: true });
+    }
   }
+}
+
+for (const phase of ['server', 'loader', 'session'] as const) {
+  test(`公开 session harness ${phase} 初始化失败仍恢复环境并关闭服务、清理 fixture`, async () => {
+    const oldCwd = process.cwd();
+    const oldAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const failure = new Error(`合成 ${phase} 初始化失败`);
+    let fixture = '';
+    let server: Server | undefined;
+    try {
+      await assert.rejects(run({ onSetup(current, dir, activeServer) {
+        if (current !== phase) return;
+        fixture = dir;
+        server = activeServer;
+        assert.equal(server.listening, true);
+        throw failure;
+      } }), (error) => error === failure);
+      assert.equal(process.cwd(), oldCwd);
+      assert.equal(process.env.PI_CODING_AGENT_DIR, oldAgentDir);
+      assert.equal(server?.listening, false);
+      await assert.rejects(stat(fixture), { code: 'ENOENT' });
+    } finally {
+      // red 阶段也只清理本测试合成资源，不让后续测试继承污染。
+      process.chdir(oldCwd);
+      if (oldAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = oldAgentDir;
+      if (server?.listening) {
+        server.closeAllConnections();
+        await new Promise<void>((done) => server!.close(() => done()));
+      }
+      if (fixture) await rm(fixture, { recursive: true, force: true });
+    }
+  });
 }
 
 test('standard package discovers one image tool and generates a displayed first image with saved original', async () => {

@@ -6,6 +6,9 @@
 .env.*
 !.env.example
 
+# 图像服务私有配置
+image-kit.json
+
 # 依赖
 node_modules/
 .venv/

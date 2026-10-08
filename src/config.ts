@@ -1,0 +1,68 @@
+import { getAgentDir } from '@earendil-works/pi-coding-agent';
+import { readFile } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
+
+export interface ImageKitConfig {
+  endpoint: string;
+  apiKey: string;
+  timeoutMs: number;
+  saveDirectory: string | false;
+  exposure: 'direct' | 'deferred';
+}
+
+async function readConfig(path: string): Promise<Record<string, unknown>> {
+  try {
+    const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    return value as Record<string, unknown>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    // Never interpolate parser errors, paths, or file contents: they may contain keys.
+    throw new Error('image-kit 配置不可读取或不是有效 JSON 对象。');
+  }
+}
+
+async function readMergedConfig(cwd: string): Promise<Record<string, unknown>> {
+  return {
+    ...await readConfig(join(getAgentDir(), 'image-kit.json')),
+    ...await readConfig(join(cwd, '.pi', 'image-kit.json')),
+  };
+}
+
+function parseExposure(exposure: unknown): 'direct' | 'deferred' {
+  if (exposure === undefined || exposure === 'direct') return 'direct';
+  if (exposure === 'deferred') return 'deferred';
+  throw new Error('image-kit exposure 应为 direct 或 deferred。');
+}
+
+export async function loadConfig(cwd: string): Promise<ImageKitConfig> {
+  const value = await readMergedConfig(cwd);
+  if (typeof value.endpoint !== 'string' || typeof value.apiKey !== 'string' || !value.apiKey.trim()) {
+    throw new Error('请先在 pi agent 目录或项目 .pi/image-kit.json 配置 endpoint 与 apiKey；不要在会话粘贴密钥。');
+  }
+  try {
+    const url = new URL(value.endpoint);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
+  } catch { throw new Error('image-kit endpoint 应为无内嵌认证的 HTTP(S) API 基址。'); }
+  if (value.timeoutMs !== undefined && (!Number.isSafeInteger(value.timeoutMs) || (value.timeoutMs as number) <= 0)) {
+    throw new Error('image-kit timeoutMs 应为正整数毫秒。');
+  }
+  if (value.saveDirectory !== undefined && value.saveDirectory !== false && (typeof value.saveDirectory !== 'string' || !isAbsolute(value.saveDirectory))) {
+    throw new Error('image-kit saveDirectory 应为绝对目录路径或 false。');
+  }
+  const exposure = parseExposure(value.exposure);
+  return {
+    endpoint: value.endpoint.replace(/\/+$/, ''),
+    apiKey: value.apiKey,
+    timeoutMs: (value.timeoutMs as number | undefined) ?? 120_000,
+    saveDirectory: (value.saveDirectory as string | false | undefined) ?? join(cwd, '.pi', 'images'),
+    exposure,
+  };
+}
+
+// Loading a package must not require credentials. Only the optional exposure is
+// read during registration; full service configuration is checked on execution.
+export async function loadExposure(cwd: string): Promise<'direct' | 'deferred'> {
+  const value = await readMergedConfig(cwd);
+  return parseExposure(value.exposure);
+}

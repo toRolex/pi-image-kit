@@ -1,0 +1,22 @@
+pi-image-kit — unofficial, independently implemented pi port
+Copyright 2026 rolex
+
+Public source and imagegen resources are preserved from OpenAI Codex 0.160.0,
+commit a956835d020762cb2b570053af06f643a11c0ecc, under Apache-2.0.
+The immutable originals are in vendor/codex-0.160.0/.
+Modified runtime file: skills/imagegen/SKILL.md (2026-10-08).
+It adapts pi tool/configuration/model routing/save paths and pending ticket scope;
+complete prompting, inspection, iteration and resource guidance is retained.
+Scripts, five references, agents, assets and LICENSE.txt remain unchanged.
+Detailed source URLs, hashes and adaptation records: resources.json.
+Rust source is retained for audit, not used as the pi runtime. No official
+OpenAI or pi endorsement is claimed. Baseline updates require review.
+
+Applicable upstream NOTICE, reproduced in full:
+
+OpenAI Codex
+Copyright 2025 OpenAI
+
+This project includes code derived from [Ratatui](https://github.com/ratatui/ratatui), licensed under the MIT license.
+Copyright (c) 2016-2022 Florian Dehau
+Copyright (c) 2023-2025 The Ratatui Developers

@@ -287,10 +287,10 @@
     {
       "path": "skills/imagegen/SKILL.md",
       "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/SKILL.md",
-      "sha256": "b4d4ff6f7119eac1b1ad5e81f7358b06ac3ab9b8a072c6e888305ab7a544daca",
+      "sha256": "907dd1c0dc41d6cf2cbe34487db4ea5df7961a4e3913e53ca20245d5153827ff",
       "modified": true,
       "modifiedOn": "2026-10-08",
-      "adaptation": "Unofficial pi image_generate routing, endpoint/key config, model selection and pending policies, original/preview semantics, pi save paths, uv-only Python, generation-only ticket 2 scope. Full prompt/inspection/iteration/reference guidance retained."
+      "adaptation": "非官方 pi image_generate 路由、endpoint/key 配置、模型选择与未决策略、原图/预览语义、pi 保存路径、仅 uv 的 Python 约定；#3 增绝对路径 JSON 编辑及 recent 校验，#4 取图待实现。保留完整提示、检查、迭代与参考指导。"
     },
     {
       "path": "skills/imagegen/agents/openai.yaml",

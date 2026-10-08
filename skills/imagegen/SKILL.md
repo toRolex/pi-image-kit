@@ -11,7 +11,7 @@ Generates or edits images for the current project (for example website assets, g
 
 Unofficial, independently implemented pi port. The complete immutable upstream skill and sources are in `vendor/codex-0.160.0/`; `resources.json` tracks every original and runtime copy. Prompting, inspection, iteration, scripts and references remain complete. This section overrides Codex-specific execution advice in the preserved references.
 
-Current ticket #2 delivers new-image generation only through the single `image_generate` tool. Path edits (#3), recent-session edits (#4), and live CLI integration (#5) are not implemented yet; do not pretend a path or preview is an original, or run CLI automatically. The future edit parameters will use the same tool and result pipeline.
+唯一 `image_generate` tool 支持新图与绝对路径编辑。路径编辑契约见下方 Built-in edit semantics；recent 会话续改等待 #4，CLI 执行集成由 #5 负责。预览不等于原图，编辑失败不自动运行 CLI。
 
 Tool input: `prompt`, optional `transparent_background`, and authorized model extension `model`. User-explicit model IDs take precedence and are sent verbatim. For an agent-selected model set `model_source: "agent"` and `model_selection_basis` to actual verified task evidence; without evidence use `gpt-image-2.5`. Never invent capability, price, speed differences. Initial candidates: `gpt-image-2`, `gpt-image-2.5`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. Other model policy awaits confirmation: a temporary gate makes no request, not a permanent refusal policy. Model selection is never CLI consent.
 
@@ -86,10 +86,11 @@ Intent:
 - If the user provides no images, treat the request as **generate**.
 
 Built-in edit semantics:
-- Editing is a follow-up (#3 absolute paths, #4 recent originals); do not claim it is available in #2.
-- pi previews may be resized. Inspecting a file does not supply a trustworthy original automatically.
-- Until the edit tickets land, explain the scope and do not send a generation request as if it were an edit.
-- If a local file still needs direct file-path control, masks, or other explicit CLI-only parameters, use the explicit CLI fallback only when the user asks for it.
+- 用户说“修改 `/绝对路径/图片.png`，保留主体，背景透明”时，调用同一 `image_generate`：完整 `prompt`、`referenced_image_paths: ["/绝对路径/图片.png"]`、`transparent_background: true`；多图按用户给定顺序最多五张。
+- 非空路径走官方 JSON `images/edits`，图片按内容解码、不缩放；PNG/JPEG/WebP 原字节保留，其余可解码格式转 PNG。路径输入使用本地原文件，不使用 pi 缩放预览。
+- 无引用或空路径数组走 generation。相对路径、不可读取/解码图片、超过五张或两种引用冲突均报错且不发送请求；向用户解释并请其修正引用，不猜测替代。
+- `num_last_images_to_include` 只允许一至五，与非空路径互斥；recent 取图尚未实现，等待 #4。空路径也不将 recent 请求变为 generation。
+- mask 等 CLI 专有参数只在用户明确选择 CLI 后使用；JSON 编辑不兼容时明确停止，不切换 multipart、模型、认证或路线。
 - For edits, preserve invariants aggressively and save non-destructively by default.
 
 Execution strategy:
@@ -109,7 +110,7 @@ Assume the user wants a new image unless they clearly ask to change an existing 
    - reference image
    - edit target
    - supporting insert/style/compositing input
-7. For an edit, check whether #3/#4 is implemented; do not fabricate unavailable reference support. Inspect inputs, but distinguish previews from originals.
+7. 编辑时按 Built-in edit semantics 收集绝对路径原图；recent 等待 #4。检查输入，但区分预览与原图。
 8. If the user asked for a photo, illustration, sprite, product image, banner, or other explicitly raster-style asset, use `image_generate` rather than substituting SVG/HTML/CSS placeholders. If the request is for an icon, logo, or UI graphic that should match existing repo-native SVG/vector/code assets, prefer editing those directly instead.
 9. Augment the prompt based on specificity:
    - If the user's prompt is already specific and detailed, normalize it into a clear spec without adding creative requirements.

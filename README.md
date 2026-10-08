@@ -74,7 +74,7 @@ mock 覆盖四模型显式选择、默认与 agent 依据、透明参数、首�
 
 ## 后续公共 seam 与范围
 
-- `src/tool.ts` 的 `createImageTool()`：唯一入口；#3 增路径引用，#4 增 recent。当前明确仅新图，未知编辑字段 schema 拒绝，绝不把编辑误做生成。
+- `src/tool.ts` 的 `createImageTool()`：唯一入口，支持新图及 #3 绝对路径编辑。例如“修改 `/绝对路径/图片.png`，背景透明”：传 `prompt`、`referenced_image_paths: ["/绝对路径/图片.png"]`、`transparent_background: true`；最多五张，按输入顺序发送官方 JSON `images/edits`。按文件内容解码且不缩放，PNG/JPEG/WebP 保留原字节，其余可解码格式转 PNG；相对路径、不可读取/解码、超量及与 recent 冲突均不发请求。无引用或空路径数组保持 generation。`num_last_images_to_include` 仅校验一至五与冲突，取会话原图等待 #4，不降级生成。#3 mock 经公开 session/fake HTTP 验证；真实 JSON edits 兼容与透明效果未验证。
 - `src/config.ts` 的 `loadConfig()`：共同配置与认证；`requestImage()`：JSON `generations`/`edits` 共享传输，没有 multipart 或 CLI fallback。
 - `src/output.ts` 的 `imageOutput()`：统一第一项 image content、保存与 warning。`details.original` 标记本包 source/version、MIME、SHA256，成功保存时是原图路径，失败/禁用保存时留原始 base64；#4 应验证 provenance/hash 并从公开 session branch 取自产原图，而非把 pi 缩放预览当原图。自动 normalize 保留 details；任意其它扩展仍可能替换 details，不承诺通用宿主保证。
 - #5 才实现主动 CLI 备用闭环；完整脚本已打包但本票不执行。所有 Python 操作仅 uv。原脚本默认 `gpt-image-2` 未修改，不表示 pi CLI 默认决策已定。

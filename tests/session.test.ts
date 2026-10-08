@@ -11,6 +11,8 @@ import { createAssistantMessageEventStream, InMemoryCredentialStore, type Assist
 // package discovery, schemas, tool execution, HTTP, and session history are real.
 const root = resolve(import.meta.dirname, '..');
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jxioAAAAASUVORK5CYII=';
+// 原有输出样本仅检验结果契约；输入样本必须能完整解码。
+const referencePng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const secret = 'dummy-secret-do-not-leak';
 interface Scenario {
   args?: JsonObject;
@@ -23,6 +25,8 @@ interface Scenario {
   saveFailure?: boolean;
   bodyDelay?: boolean;
   rawConfig?: string;
+  references?: { name: string; bytes: Buffer }[];
+  referenceArgs?: JsonObject;
 }
 async function run(scenario: Scenario = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'image-kit-test-'));
@@ -55,9 +59,15 @@ async function run(scenario: Scenario = {}) {
   const settings = SettingsManager.inMemory({ packages: [root, root], defaultTools: legacy ? ['tool_search', 'image_generate'] : scenario.searches ? ['tool_search'] : ['image_generate'], retry: { enabled: false }, compaction: { enabled: false } });
   const loader = new DefaultResourceLoader({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, noContextFiles: true, noPromptTemplates: true, noThemes: true, disabledBuiltinExtensions: ['mcp'], additionalExtensionPaths: legacy ? [legacyAdapter] : [], extensionFactories: !legacy && scenario.searches ? [createToolSearchExtension()] : [] });
   const runtime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, modelsStorePath: join(dir, 'models.json'), refreshOnCreate: false, allowModelNetwork: false });
+  const paths: string[] = [];
+  for (const reference of scenario.references ?? []) {
+    const path = join(dir, reference.name);
+    await writeFile(path, reference.bytes);
+    paths.push(path);
+  }
   const calls: ToolCall[] = [
     ...Array.from({ length: scenario.searches ?? 0 }, (_, i) => ({ type: 'toolCall' as const, id: `search-${i}`, name: 'tool_search', arguments: { query: legacy && i > 0 ? 'select:image_generate' : 'image generation transparent', limit: 1 } })),
-    { type: 'toolCall', id: 'generate', name: 'image_generate', arguments: scenario.args ?? { prompt: 'A tiny transparent blue dot', transparent_background: true } },
+    { type: 'toolCall', id: 'generate', name: 'image_generate', arguments: scenario.references ? { prompt: '保留蓝点，移除背景', referenced_image_paths: paths, ...scenario.referenceArgs } : scenario.args ?? { prompt: 'A tiny transparent blue dot', transparent_background: true } },
   ];
   let step = 0;
   const modelInputs: unknown[] = [];
@@ -119,6 +129,64 @@ test('standard package discovers one image tool and generates a displayed first 
     assert.equal(details.original.path, details.savedPath);
     assert.deepEqual(await readFile(details.savedPath), Buffer.from(png, 'base64'));
     assert.ok(!JSON.stringify({ messages: value.messages, modelInputs: value.modelInputs }).includes(secret));
+  } finally { await value.cleanup(); }
+});
+
+test('一张绝对路径原图通过唯一会话工具完成 JSON 编辑并显示保存结果', async () => {
+  const value = await run({ references: [{ name: 'reference.not-png', bytes: Buffer.from(referencePng, 'base64') }], referenceArgs: { transparent_background: true, model: 'gpt-image-2', model_source: 'user' } });
+  try {
+    assert.deepEqual(value.errors, []);
+    assert.equal(value.tools.filter((tool) => tool.name === 'image_generate').length, 1);
+    assert.deepEqual(value.requests, [{ path: '/v1/images/edits', authorization: `Bearer ${secret}`, body: { prompt: '保留蓝点，移除背景', model: 'gpt-image-2', background: 'transparent', quality: 'auto', size: 'auto', images: [{ image_url: `data:image/png;base64,${referencePng}` }] } }]);
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+    assert.deepEqual(value.result.content.find((c) => c.type === 'image'), { type: 'image', data: png, mimeType: 'image/png' });
+    const details = value.result.details as { savedPath: string; transparency: { requested: boolean; verified: boolean } };
+    assert.deepEqual(await readFile(details.savedPath), Buffer.from(png, 'base64'));
+    assert.equal(details.transparency.requested, true);
+    assert.equal(details.transparency.verified, false);
+  } finally { await value.cleanup(); }
+});
+
+// 3001×1 的 BMP 超过 pi 默认预览宽度；编辑转换格式也不能缩小原图。
+function wideBmp(): Buffer {
+  const bytes = Buffer.alloc(54 + 9004);
+  bytes.write('BM');
+  bytes.writeUInt32LE(bytes.length, 2);
+  bytes.writeUInt32LE(54, 10);
+  bytes.writeUInt32LE(40, 14);
+  bytes.writeInt32LE(3001, 18);
+  bytes.writeInt32LE(1, 22);
+  bytes.writeUInt16LE(1, 26);
+  bytes.writeUInt16LE(24, 28);
+  return bytes;
+}
+
+test('五张路径按顺序编辑，保留 PNG/JPEG/WebP 字节并将 GIF/BMP 转 PNG，原图不缩放', async () => {
+  const jpeg = '/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCAABAAEDAREAAhEBAxEB/9sAQwAGBAUGBQQGBgUGBwcGCAoQCgoJCQoUDg8MEBcUGBgXFBYWGh0lHxobIxwWFiAsICMmJykqKRkfLTAtKDAlKCko/9sAQwEHBwcKCAoTCgoTKBoWGigoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD5UoA//9k=';
+  const webp = 'UklGRhoAAABXRUJQVlA4TA4AAAAvAAAAEM1VICICEREJAA==';
+  const gif = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const value = await run({ references: [
+    { name: '1.jpg', bytes: Buffer.from(referencePng, 'base64') },
+    { name: '2.png', bytes: Buffer.from(webp, 'base64') },
+    { name: '3.gif', bytes: Buffer.from(gif, 'base64') },
+    { name: '4.bmp', bytes: wideBmp() },
+    { name: '5.png', bytes: Buffer.from(jpeg, 'base64') },
+  ], referenceArgs: { model: 'gpt-image-2.5-flare', model_source: 'agent' } });
+  try {
+    assert.equal(value.requests.length, 1);
+    assert.equal(value.requests[0].path, '/v1/images/edits');
+    const body = value.requests[0].body as { model: string; background: string; images: { image_url: string }[] };
+    assert.equal(body.model, 'gpt-image-2.5');
+    assert.equal(body.background, 'opaque');
+    assert.equal(body.images.length, 5);
+    assert.equal(body.images[0].image_url, `data:image/png;base64,${referencePng}`);
+    assert.equal(body.images[1].image_url, `data:image/webp;base64,${webp}`);
+    assert.match(body.images[2].image_url, /^data:image\/png;base64,/);
+    const converted = Buffer.from(body.images[3].image_url.split(',')[1], 'base64');
+    assert.equal(converted.readUInt32BE(16), 3001);
+    assert.equal(converted.readUInt32BE(20), 1);
+    assert.equal(body.images[4].image_url, `data:image/jpeg;base64,${jpeg}`);
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
   } finally { await value.cleanup(); }
 });
 
@@ -208,14 +276,102 @@ for (const scenario of [
 
 for (const args of ([
   { prompt: '' }, { prompt: 'a dot', model: 1 }, { prompt: 'a dot', transparent_background: 'yes' },
-  { prompt: 'an edit', referenced_image_paths: ['/tmp/reference.png'] },
-  { prompt: 'an edit', num_last_images_to_include: 1 },
+  { prompt: 'an edit', referenced_image_paths: ['/tmp/pi-image-kit-missing-reference.png'] },
+  { prompt: 'an edit', referenced_image_paths: ['relative.png'] },
+  { prompt: 'an edit', referenced_image_paths: Array(6).fill('/tmp/reference.png') },
+  { prompt: 'an edit', referenced_image_paths: ['/tmp/reference.png'], num_last_images_to_include: 1 },
+  ...[0, 6, -1, 1.5, '1', 1, 5].map((count) => ({ prompt: 'an edit', num_last_images_to_include: count })),
+  { prompt: 'an edit', referenced_image_paths: [], num_last_images_to_include: 1 },
 ] as JsonObject[])) {
   test(`invalid or future edit input does not send a generation request: ${JSON.stringify(args)}`, async () => {
     const value = await run({ args });
     try {
       assert.equal(value.requests.length, 0);
       assert.equal(value.result?.role === 'toolResult' && value.result.isError, true);
+    } finally { await value.cleanup(); }
+  });
+}
+
+test('空路径数组保持无引用的 generation 语义', async () => {
+  const value = await run({ args: { prompt: '一颗蓝点', referenced_image_paths: [] } });
+  try {
+    assert.equal(value.requests.length, 1);
+    assert.equal(value.requests[0].path, '/v1/images/generations');
+    assert.ok(!('images' in (value.requests[0].body as object)));
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+  } finally { await value.cleanup(); }
+});
+
+for (const bytes of [Buffer.from('not an image'), Buffer.from(referencePng, 'base64').subarray(0, 24)]) {
+  test('不可解码或截断的参考图片明确报错且不发送请求', async () => {
+    const value = await run({ references: [{ name: 'invalid.png', bytes }] });
+    try {
+      assert.equal(value.requests.length, 0);
+      assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+      assert.match(JSON.stringify(value.result), /无法解码/);
+    } finally { await value.cleanup(); }
+  });
+}
+
+for (const model of ['gpt-image-2', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']) {
+  test(`路径编辑显式模型 ${model} 原样发送，未知透明效果不作保证`, async () => {
+    const value = await run({ references: [{ name: 'input.png', bytes: Buffer.from(referencePng, 'base64') }], referenceArgs: { model, model_source: 'user', model_selection_basis: '无关 agent 偏好', transparent_background: true }, body: { data: [{ b64_json: png }] } });
+    try {
+      assert.equal(value.requests.length, 1);
+      assert.equal(value.requests[0].path, '/v1/images/edits');
+      assert.equal((value.requests[0].body as { model: string }).model, model);
+      assert.equal((value.requests[0].body as { background: string }).background, 'transparent');
+      assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+      const details = value.result.details as { transparency: { reported: string; verified: boolean } };
+      assert.equal(details.transparency.reported, 'unknown');
+      assert.equal(details.transparency.verified, false);
+    } finally { await value.cleanup(); }
+  });
+}
+
+test('路径编辑有依据的 agent 选档保留原模型；候选外模型不发请求', async () => {
+  for (const model of ['gpt-image-2.5-flare', 'future-image-model']) {
+    const value = await run({ references: [{ name: 'input.png', bytes: Buffer.from(referencePng, 'base64') }], referenceArgs: { model, model_source: 'agent', model_selection_basis: '用户提供已验证的任务依据' } });
+    try {
+      assert.equal(value.requests.length, model === 'future-image-model' ? 0 : 1);
+      if (value.requests.length) assert.equal((value.requests[0].body as { model: string }).model, model);
+      else assert.match(JSON.stringify(value.result), /策略待用户确认/);
+    } finally { await value.cleanup(); }
+  }
+});
+
+test('路径编辑落盘失败仍显示首图和 warning，不改取后续项', async () => {
+  const value = await run({ references: [{ name: 'input.png', bytes: Buffer.from(referencePng, 'base64') }], saveFailure: true });
+  try {
+    assert.equal(value.requests.length, 1);
+    assert.equal(value.requests[0].path, '/v1/images/edits');
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+    assert.deepEqual(value.result.content.find((c) => c.type === 'image'), { type: 'image', data: png, mimeType: 'image/png' });
+    const details = value.result.details as { warning: string; savedPath?: string; original: { base64: string } };
+    assert.equal(details.savedPath, undefined);
+    assert.equal(details.original.base64, png);
+    assert.match(details.warning, /保存失败/);
+    assert.match(JSON.stringify(value.result.content), /Warning/);
+  } finally { await value.cleanup(); }
+});
+
+for (const scenario of [
+  { status: 401, body: { error: secret }, error: /HTTP 401/ },
+  { delay: true, config: { timeoutMs: 30 }, error: /超时/ },
+  { body: { data: [{ url: 'https://private.invalid/image' }, { b64_json: png }] }, error: /首项结果/ },
+]) {
+  test('路径编辑服务失败明确返回错误，不转 generation/模型/认证/CLI', async () => {
+    const value = await run({ ...scenario, references: [{ name: 'input.png', bytes: Buffer.from(referencePng, 'base64') }] });
+    try {
+      assert.equal(value.requests.length, 1);
+      assert.equal(value.requests[0].path, '/v1/images/edits');
+      assert.equal(value.requests[0].authorization, `Bearer ${secret}`);
+      assert.equal((value.requests[0].body as { model: string }).model, 'gpt-image-2.5');
+      assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+      assert.match(JSON.stringify(value.result), scenario.error);
+      assert.ok(!value.result.content.some((c) => c.type === 'image'));
+      assert.ok(!JSON.stringify({ messages: value.messages, modelInputs: value.modelInputs }).includes(secret));
+      assert.deepEqual(value.messages.filter((m) => m.role === 'toolResult').map((m) => m.role === 'toolResult' && m.toolName), ['image_generate']);
     } finally { await value.cleanup(); }
   });
 }

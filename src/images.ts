@@ -1,4 +1,31 @@
+import { readFile } from 'node:fs/promises';
+import { isAbsolute } from 'node:path';
+import { convertToPng } from '@earendil-works/pi-coding-agent';
 import type { ImageKitConfig } from './config.ts';
+
+export interface ImageReference { image_url: string }
+
+// 对照固定 Codex 的 Original：按内容解码验证，不缩放；PNG/JPEG/WebP 保留原字节，其余转 PNG。
+export async function readImageReferences(paths: string[]): Promise<ImageReference[]> {
+  const images: ImageReference[] = [];
+  for (const path of paths) {
+    if (!isAbsolute(path)) throw new Error('参考图片必须使用绝对路径；本次未发送请求。');
+    let bytes: Buffer;
+    try { bytes = await readFile(path); }
+    catch { throw new Error('无法读取参考图片；本次未发送请求。'); }
+    const data = bytes.toString('base64');
+    // 不传 image/png，避免宿主 PNG 快捷分支跳过解码校验；转换函数不缩放。
+    const decoded = await convertToPng(data, 'application/octet-stream');
+    if (!decoded) throw new Error('参考文件无法解码为图片；本次未发送请求。');
+    let mime: string | undefined;
+    if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) mime = 'image/png';
+    else if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) mime = 'image/jpeg';
+    else if (bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') mime = 'image/webp';
+    const image = mime ? { mimeType: mime, data } : decoded;
+    images.push({ image_url: `data:${image.mimeType};base64,${image.data}` });
+  }
+  return images;
+}
 
 export interface ImageRequest {
   prompt: string;
@@ -18,11 +45,11 @@ function requestError(timeout: AbortSignal, signal: AbortSignal | undefined, fal
   return new Error(fallback);
 }
 
-// Shared transport seam for #3 JSON edits; no multipart or CLI fallback.
+// 生成与 JSON 编辑共用传输；不切换 multipart 或 CLI。
 export async function requestImage(
   config: ImageKitConfig,
   operation: 'generations' | 'edits',
-  request: ImageRequest & { images?: unknown[] },
+  request: ImageRequest & { images?: ImageReference[] },
   signal?: AbortSignal,
 ): Promise<ImageResponse> {
   const timeout = AbortSignal.timeout(config.timeoutMs);

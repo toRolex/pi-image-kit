@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createToolSearchExtension } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, createToolSearchExtension, convertToPng } from '@earendil-works/pi-coding-agent';
 import { createAssistantMessageEventStream, InMemoryCredentialStore, type AssistantMessage, type ToolCall, type JsonObject } from '@earendil-works/pi-ai';
 
 // Public session seam. The scripted provider replaces only the external LLM;
@@ -27,7 +28,12 @@ interface Scenario {
   rawConfig?: string;
   references?: { name: string; bytes: Buffer }[];
   referenceArgs?: JsonObject;
+  generations?: string[];
+  beforeRecent?: (manager: SessionManager) => void;
+  editStatus?: number;
+  editBody?: unknown;
 }
+
 async function run(scenario: Scenario = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'image-kit-test-'));
   const requests: { path: string; authorization?: string; body: unknown }[] = [];
@@ -36,9 +42,12 @@ async function run(scenario: Scenario = {}) {
     for await (const chunk of req) data += chunk;
     requests.push({ path: req.url!, authorization: req.headers.authorization, body: JSON.parse(data) });
     if (scenario.delay) return;
-    res.writeHead(scenario.status ?? 200, { 'Content-Type': 'application/json' });
+    const edit = req.url?.endsWith('/edits');
+    res.writeHead((edit ? scenario.editStatus : undefined) ?? scenario.status ?? 200, { 'Content-Type': 'application/json' });
     if (scenario.bodyDelay) { res.flushHeaders(); return; }
-    res.end(JSON.stringify(scenario.body === undefined ? { data: [{ b64_json: png }, { b64_json: 'ignored' }], background: 'transparent' } : scenario.body));
+    const generated = scenario.generations?.[requests.length - 1] ?? png;
+    const body = edit && scenario.editBody !== undefined ? scenario.editBody : scenario.body;
+    res.end(JSON.stringify(body === undefined ? { data: [{ b64_json: generated }, { b64_json: 'ignored' }], background: 'transparent' } : body));
   });
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   server.unref();
@@ -66,17 +75,23 @@ async function run(scenario: Scenario = {}) {
     paths.push(path);
   }
   const calls: ToolCall[] = [
+    ...(scenario.generations ?? []).map((_, i) => ({ type: 'toolCall' as const, id: `prior-${i}`, name: 'image_generate', arguments: { prompt: `生成第 ${i + 1} 张图` } })),
     ...Array.from({ length: scenario.searches ?? 0 }, (_, i) => ({ type: 'toolCall' as const, id: `search-${i}`, name: 'tool_search', arguments: { query: legacy && i > 0 ? 'select:image_generate' : 'image generation transparent', limit: 1 } })),
     { type: 'toolCall', id: 'generate', name: 'image_generate', arguments: scenario.references ? { prompt: '保留蓝点，移除背景', referenced_image_paths: paths, ...scenario.referenceArgs } : scenario.args ?? { prompt: 'A tiny transparent blue dot', transparent_background: true } },
   ];
+  const sessionManager = SessionManager.inMemory(dir);
   let step = 0;
+  let historyComplete = !scenario.generations?.length;
   const modelInputs: unknown[] = [];
   runtime.registerProvider('image-kit-fake', {
     api: 'image-kit-fake', apiKey: 'dummy-llm', baseUrl: 'http://127.0.0.1/never-called',
     models: [{ id: 'scripted', name: 'Scripted test LLM', reasoning: false, input: ['text', 'image'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100000, maxTokens: 1024 }],
     streamSimple(model, context) {
       modelInputs.push(context);
-      const call = calls[step++];
+      let call: ToolCall | undefined;
+      if (!historyComplete && step === scenario.generations!.length) historyComplete = true;
+      else call = calls[step++];
+      if (call?.id === 'generate') scenario.beforeRecent?.(sessionManager);
       const message: AssistantMessage = { role: 'assistant', api: model.api, provider: model.provider, model: model.id, content: call ? [call] : [{ type: 'text', text: 'Done' }], stopReason: call ? 'toolUse' : 'stop', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, timestamp: Date.now() };
       const stream = createAssistantMessageEventStream();
       stream.push({ type: 'done', reason: message.stopReason as 'toolUse' | 'stop', message });
@@ -88,11 +103,12 @@ async function run(scenario: Scenario = {}) {
   process.chdir(dir);
   process.env.PI_CODING_AGENT_DIR = join(dir, 'agent');
   await loader.reload();
-  const { session, extensionsResult } = await createAgentSession({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, sessionManager: SessionManager.inMemory(dir), modelRuntime: runtime, model: runtime.getModel('image-kit-fake', 'scripted')!, resourceLoader: loader });
+  const { session, extensionsResult } = await createAgentSession({ cwd: dir, agentDir: join(dir, 'agent'), settingsManager: settings, sessionManager, modelRuntime: runtime, model: runtime.getModel('image-kit-fake', 'scripted')!, resourceLoader: loader });
   try {
     await session.bindExtensions({});
     const initiallyActive = session.getActiveToolNames();
-    await session.prompt('请生成透明蓝点；按要求的模型，不要使用 CLI。');
+    if (scenario.generations?.length) await session.prompt(`请先生成 ${scenario.generations.length} 张会话图片。`);
+    await session.prompt(scenario.generations?.length ? '请修改最近的会话图片；按要求的模型，不要使用 CLI。' : '请生成透明蓝点；按要求的模型，不要使用 CLI。');
     const messages = session.messages;
     const result = messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'generate');
     return { requests, messages, result, initiallyActive, finallyActive: session.getActiveToolNames(), tools: session.getAllTools(), skills: loader.getSkills(), errors: extensionsResult.errors, modelInputs, dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
@@ -132,6 +148,144 @@ test('standard package discovers one image tool and generates a displayed first 
   } finally { await value.cleanup(); }
 });
 
+test('先生成并经 pi 缩放预览，再 recent1 编辑真正的原图', async () => {
+  const original = await convertToPng(wideBmp().toString('base64'), 'image/bmp');
+  assert.ok(original);
+  const value = await run({ generations: [original.data], args: { prompt: '修改最近图片，保留原尺寸', num_last_images_to_include: 1, transparent_background: true, model: 'gpt-image-2', model_source: 'user' } });
+  try {
+    assert.equal(value.requests.length, 2);
+    assert.equal(value.requests[0].path, '/v1/images/generations');
+    const prior = value.messages.find((m) => m.role === 'toolResult' && m.toolCallId === 'prior-0');
+    assert.ok(prior?.role === 'toolResult' && !prior.isError);
+    const preview = prior.content.find((c) => c.type === 'image');
+    assert.ok(preview?.type === 'image');
+    assert.notEqual(preview.data, original.data);
+    assert.ok(Buffer.from(preview.data, 'base64').readUInt32BE(16) < 3001);
+    assert.deepEqual(value.requests[1], { path: '/v1/images/edits', authorization: `Bearer ${secret}`, body: { prompt: '修改最近图片，保留原尺寸', model: 'gpt-image-2', background: 'transparent', quality: 'auto', size: 'auto', images: [{ image_url: `data:image/png;base64,${original.data}` }] } });
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+    assert.ok(value.result.content.some((c) => c.type === 'image' && c.data === png));
+  } finally { await value.cleanup(); }
+});
+
+test('recent5 从六次真实生成中选最新五张，原图内容按 chronological 顺序发出', async () => {
+  const originals: string[] = [];
+  for (const color of [0, 20, 40, 60, 80, 100]) {
+    const converted = await convertToPng(wideBmp(color).toString('base64'), 'image/bmp');
+    assert.ok(converted);
+    originals.push(converted.data);
+  }
+  const value = await run({ generations: originals, args: { prompt: '修改最近五张图', num_last_images_to_include: 5, referenced_image_paths: [], model: 'gpt-image-2.5-sunburst', model_source: 'agent', model_selection_basis: '用户已验证的任务依据' } });
+  try {
+    assert.equal(value.requests.length, 7);
+    const body = value.requests[6].body as { model: string; images: { image_url: string }[] };
+    assert.equal(value.requests[6].path, '/v1/images/edits');
+    assert.equal(body.model, 'gpt-image-2.5-sunburst');
+    assert.deepEqual(body.images, originals.slice(1).map((data) => ({ image_url: `data:image/png;base64,${data}` })));
+    for (let i = 0; i < 6; i++) {
+      const prior = value.messages.find((m) => m.role === 'toolResult' && m.toolCallId === `prior-${i}`);
+      assert.ok(prior?.role === 'toolResult' && prior.content.some((c) => c.type === 'image' && c.data !== originals[i]));
+    }
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+  } finally { await value.cleanup(); }
+});
+
+test('recent 只读取 SessionManager 活动 branch，不用仍含被离开分支的 agent messages', async () => {
+  const value = await run({ generations: [referencePng, png], args: { prompt: '修改当前分支最后一张', num_last_images_to_include: 1 }, beforeRecent(manager) {
+    const prior = manager.getBranch().find((entry) => entry.type === 'message' && entry.message.role === 'toolResult' && entry.message.toolCallId === 'prior-0');
+    assert.ok(prior);
+    manager.branch(prior.id);
+  } });
+  try {
+    assert.equal(value.requests.length, 3);
+    assert.deepEqual((value.requests[2].body as { images: unknown }).images, [{ image_url: `data:image/png;base64,${referencePng}` }]);
+    assert.ok(value.messages.some((m) => m.role === 'toolResult' && m.toolCallId === 'prior-1'));
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+  } finally { await value.cleanup(); }
+});
+
+test('recent 保存失败用原图 base64 续改，结果仍含首图与 warning', async () => {
+  const original = await convertToPng(wideBmp(40).toString('base64'), 'image/bmp');
+  assert.ok(original);
+  const value = await run({ generations: [original.data], saveFailure: true, args: { prompt: '续改', num_last_images_to_include: 1, model: 'gpt-image-2.5-flare', model_source: 'agent' } });
+  try {
+    assert.equal(value.requests.length, 2);
+    assert.deepEqual((value.requests[1].body as { images: unknown }).images, [{ image_url: `data:image/png;base64,${original.data}` }]);
+    assert.equal((value.requests[1].body as { model: string }).model, 'gpt-image-2.5');
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+    assert.ok(value.result.content.some((c) => c.type === 'image' && c.data === png));
+    const details = value.result.details as { warning: string; savedPath?: string; original: { base64: string } };
+    assert.equal(details.savedPath, undefined);
+    assert.equal(details.original.base64, png);
+    assert.match(details.warning, /保存失败/);
+  } finally { await value.cleanup(); }
+});
+
+for (const args of [
+  { prompt: '续改', num_last_images_to_include: 5 },
+  { prompt: '续改', num_last_images_to_include: 0 },
+  { prompt: '续改', num_last_images_to_include: 6 },
+  { prompt: '续改', num_last_images_to_include: 1.5 },
+  { prompt: '续改', num_last_images_to_include: '1' },
+  { prompt: '续改', num_last_images_to_include: null },
+  { prompt: '续改', num_last_images_to_include: true },
+  { prompt: '续改', num_last_images_to_include: 1, referenced_image_paths: ['/tmp/reference.png'] },
+] as JsonObject[]) {
+  test(`已有历史的 recent 无效输入/不足不发送编辑请求：${JSON.stringify(args)}`, async () => {
+    const value = await run({ generations: [referencePng], args });
+    try {
+      assert.equal(value.requests.length, 1);
+      assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+      if (args.num_last_images_to_include === 5) assert.match(JSON.stringify(value.result), /图片不足/);
+      if ('referenced_image_paths' in args) assert.match(JSON.stringify(value.result), /互斥/);
+    } finally { await value.cleanup(); }
+  });
+}
+
+test('recent 原图落盘路径被替换时 hash 拒绝，不把替换图或预览发给服务', async () => {
+  const value = await run({ generations: [referencePng], args: { prompt: '续改', num_last_images_to_include: 1 }, beforeRecent(manager) {
+    const entry = manager.getBranch().find((e) => e.type === 'message' && e.message.role === 'toolResult' && e.message.toolCallId === 'prior-0');
+    assert.ok(entry?.type === 'message' && entry.message.role === 'toolResult');
+    const details = entry.message.details as { original: { path: string } };
+    writeFileSync(details.original.path, Buffer.from(png, 'base64'));
+  } });
+  try {
+    assert.equal(value.requests.length, 1);
+    assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+    assert.match(JSON.stringify(value.result), /hash 不符/);
+  } finally { await value.cleanup(); }
+});
+
+test('外部 tool 的不可信 original 字段不读路径，仅使用现存图片并如实说明预览限制', async () => {
+  const value = await run({ generations: [png], args: { prompt: '续改外部图片', num_last_images_to_include: 1 }, beforeRecent(manager) {
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'external', toolName: 'read', isError: false, timestamp: Date.now(), content: [{ type: 'image', mimeType: 'image/png', data: referencePng }], details: { original: { source: 'pi-image-kit', version: 1, mimeType: 'image/png', path: '/private/never-read', sha256: '0'.repeat(64), base64: png } } });
+  } });
+  try {
+    assert.equal(value.requests.length, 2);
+    assert.deepEqual((value.requests[1].body as { images: unknown }).images, [{ image_url: `data:image/png;base64,${referencePng}` }]);
+    assert.ok(value.result?.role === 'toolResult' && !value.result.isError);
+    assert.match(JSON.stringify(value.result.content), /预览.*没有可验证的原图来源/);
+    assert.deepEqual((value.result.details as { references: { source: string }[] }).references.map((r) => r.source), ['session-preview']);
+  } finally { await value.cleanup(); }
+});
+
+for (const failure of [
+  { editStatus: 401, editBody: { error: secret }, error: /HTTP 401/ },
+  { editBody: { data: [{ url: 'https://private.invalid' }, { b64_json: png }] }, error: /首项结果/ },
+]) {
+  test('recent 编辑失败明确呈现，不换路线、模型、认证或采用后续图片', async () => {
+    const value = await run({ ...failure, generations: [referencePng], args: { prompt: '续改', num_last_images_to_include: 1, model: 'gpt-image-2.5-flare', model_source: 'user' } });
+    try {
+      assert.equal(value.requests.length, 2);
+      assert.equal(value.requests[1].path, '/v1/images/edits');
+      assert.equal(value.requests[1].authorization, `Bearer ${secret}`);
+      assert.equal((value.requests[1].body as { model: string }).model, 'gpt-image-2.5-flare');
+      assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+      assert.match(JSON.stringify(value.result), failure.error);
+      assert.ok(!JSON.stringify(value.messages).includes(secret));
+    } finally { await value.cleanup(); }
+  });
+}
+
 test('一张绝对路径原图通过唯一会话工具完成 JSON 编辑并显示保存结果', async () => {
   const value = await run({ references: [{ name: 'reference.not-png', bytes: Buffer.from(referencePng, 'base64') }], referenceArgs: { transparent_background: true, model: 'gpt-image-2', model_source: 'user' } });
   try {
@@ -148,7 +302,7 @@ test('一张绝对路径原图通过唯一会话工具完成 JSON 编辑并显�
 });
 
 // 3001×1 的 BMP 超过 pi 默认预览宽度；编辑转换格式也不能缩小原图。
-function wideBmp(): Buffer {
+function wideBmp(color = 0): Buffer {
   const bytes = Buffer.alloc(54 + 9004);
   bytes.write('BM');
   bytes.writeUInt32LE(bytes.length, 2);
@@ -158,6 +312,7 @@ function wideBmp(): Buffer {
   bytes.writeInt32LE(1, 22);
   bytes.writeUInt16LE(1, 26);
   bytes.writeUInt16LE(24, 28);
+  bytes.fill(color, 54);
   return bytes;
 }
 

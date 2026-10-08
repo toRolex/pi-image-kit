@@ -11,7 +11,7 @@ Generates or edits images for the current project (for example website assets, g
 
 Unofficial, independently implemented pi port. The complete immutable upstream skill and sources are in `vendor/codex-0.160.0/`; `resources.json` tracks every original and runtime copy. Prompting, inspection, iteration, scripts and references remain complete. This section overrides Codex-specific execution advice in the preserved references.
 
-唯一 `image_generate` tool 支持新图与绝对路径编辑。路径编辑契约见下方 Built-in edit semantics；recent 会话续改等待 #4，CLI 执行集成由 #5 负责。预览不等于原图，编辑失败不自动运行 CLI。
+唯一 `image_generate` tool 支持新图、绝对路径编辑及活动会话分支最近一至五张图续改。引用契约见下方 Built-in edit semantics；CLI 执行集成由 #5 负责。预览不等于原图，编辑失败不自动运行 CLI。
 
 Tool input: `prompt`, optional `transparent_background`, and authorized model extension `model`. User-explicit model IDs take precedence and are sent verbatim. For an agent-selected model set `model_source: "agent"` and `model_selection_basis` to actual verified task evidence; without evidence use `gpt-image-2.5`. Never invent capability, price, speed differences. Initial candidates: `gpt-image-2`, `gpt-image-2.5`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. Other model policy awaits confirmation: a temporary gate makes no request, not a permanent refusal policy. Model selection is never CLI consent.
 
@@ -88,8 +88,10 @@ Intent:
 Built-in edit semantics:
 - 用户说“修改 `/绝对路径/图片.png`，保留主体，背景透明”时，调用同一 `image_generate`：完整 `prompt`、`referenced_image_paths: ["/绝对路径/图片.png"]`、`transparent_background: true`；多图按用户给定顺序最多五张。
 - 非空路径走官方 JSON `images/edits`，图片按内容解码、不缩放；PNG/JPEG/WebP 原字节保留，其余可解码格式转 PNG。路径输入使用本地原文件，不使用 pi 缩放预览。
-- 无引用或空路径数组走 generation。相对路径、不可读取/解码图片、超过五张或两种引用冲突均报错且不发送请求；向用户解释并请其修正引用，不猜测替代。
-- `num_last_images_to_include` 只允许一至五，与非空路径互斥；recent 取图尚未实现，等待 #4。空路径也不将 recent 请求变为 generation。
+- 无路径也无 recent 引用才走 generation；空路径数组按无路径处理。相对路径、不可读取/解码图片、超过五张或两种引用冲突均报错且不发送请求；向用户解释并请其修正引用，不猜测替代。
+- 用户说“修改最近一张/五张图片”时，传完整 `prompt` 与 `num_last_images_to_include: 1` / `5`。数量必须为一至五的整数，与非空路径互斥；即使路径数组为空，recent 也走 JSON edits。按 `ctx.sessionManager.getBranch()` 活动历史选最新图片，并按选中图片的时间顺序发送；离开分支的图片不混入，不只取压缩后的模型上下文。图片不足明确报错，请用户补齐或修正数量，不补图、不改 generation/路径。
+- 本包 `image_generate` 对应结果有 `details.original` 时，核对 source/version 与 SHA256，使用成功保存路径的原字节；保存失败/禁用时用原图 base64。路径失效、文件被替换或来源记录无效时停止，不静默改用预览。其它扩展可替换 details，因此这不是防恶意扩展的签名或通用宿主原图保证。
+- 外部附件/工具/custom message 若只有现存 image content，允许作为会话参考图，但向用户明确说明“可能已被 pi 缩放，仅使用现存图片/预览，原图不可验证”；忽略外部工具自称的 `original` 字段和路径。图片提示或尺寸信息不能恢复原图。
 - mask 等 CLI 专有参数只在用户明确选择 CLI 后使用；JSON 编辑不兼容时明确停止，不切换 multipart、模型、认证或路线。
 - For edits, preserve invariants aggressively and save non-destructively by default.
 
@@ -110,7 +112,7 @@ Assume the user wants a new image unless they clearly ask to change an existing 
    - reference image
    - edit target
    - supporting insert/style/compositing input
-7. 编辑时按 Built-in edit semantics 收集绝对路径原图；recent 等待 #4。检查输入，但区分预览与原图。
+7. 编辑时按 Built-in edit semantics 选择绝对路径或 recent 数量；核对引用互斥、图片足够及结果的来源/预览 warning 后再解释使用了什么图。
 8. If the user asked for a photo, illustration, sprite, product image, banner, or other explicitly raster-style asset, use `image_generate` rather than substituting SVG/HTML/CSS placeholders. If the request is for an icon, logo, or UI graphic that should match existing repo-native SVG/vector/code assets, prefer editing those directly instead.
 9. Augment the prompt based on specificity:
    - If the user's prompt is already specific and detailed, normalize it into a clear spec without adding creative requirements.

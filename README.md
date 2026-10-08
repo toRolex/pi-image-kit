@@ -68,14 +68,14 @@ PI_IMAGE_KIT_LEGACY_SEARCH_SOURCE=/absolute/path/to/public/pi-tool-search/src/ex
 
 最高层公开 seam：隔离 `createAgentSession` + 标准 package/resource loader + `session.prompt()` + 内存 session/credentials/settings + 公开 scripted provider + localhost fake Images HTTP。真实走发现、schema、HTTP、会话输出与图片 normalize；只替代外部 LLM 和 Images 服务，不 mock 内部实现。
 
-mock 覆盖四模型显式选择、默认与 agent 依据、透明参数、首图显示/保存、保存失败、禁用保存、401、请求头/响应体 timeout、首项不可用、无效/future edit 参数不发请求、dummy secret 可见边界、普通/新版 deferred/已部署旧搜索。普通可移植测试不设置旧源码路径时，旧部署专项明确 skip，不伪称其运行。
+mock 覆盖四模型显式选择、默认与 agent 依据、透明参数、首图显示/保存、保存失败、禁用保存、401、请求头/响应体 timeout、首项不可用、无效/future edit 参数不发请求、dummy secret 可见边界、普通/新版 deferred/已部署旧搜索。recent mock 先真实生成再续改，覆盖最近1/5、3001×1原图与不同内容/尺寸的 pi normalize 预览、最新五张 chronological 顺序、活动分支切换、保存失败 base64、文件替换 hash 拒绝与外部预览来源限制；实际 capture JSON edit 的 data URL，不以数组截取测试代替会话闭环。普通可移植测试不设置旧源码路径时，旧部署专项明确 skip，不伪称其运行。
 
 **真实 Images、真实 LLM 自主自然语言发现、真实 gateway 兼容、透明效果均未执行/未验证。** 真实验收须先单独确认费用、网络、提示/图片数据发送范围，再在新的 pi 会话执行；mock 不能代替真实证据。不提交私人 session、URL、key 或生成图；不关闭 issue。
 
 ## 后续公共 seam 与范围
 
-- `src/tool.ts` 的 `createImageTool()`：唯一入口，支持新图及 #3 绝对路径编辑。例如“修改 `/绝对路径/图片.png`，背景透明”：传 `prompt`、`referenced_image_paths: ["/绝对路径/图片.png"]`、`transparent_background: true`；最多五张，按输入顺序发送官方 JSON `images/edits`。按文件内容解码且不缩放，PNG/JPEG/WebP 保留原字节，其余可解码格式转 PNG；相对路径、不可读取/解码、超量及与 recent 冲突均不发请求。无引用或空路径数组保持 generation。`num_last_images_to_include` 仅校验一至五与冲突，取会话原图等待 #4，不降级生成。#3 mock 经公开 session/fake HTTP 验证；真实 JSON edits 兼容与透明效果未验证。
+- `src/tool.ts` 的 `createImageTool()`：唯一入口，支持新图及 #3 绝对路径编辑。例如“修改 `/绝对路径/图片.png`，背景透明”：传 `prompt`、`referenced_image_paths: ["/绝对路径/图片.png"]`、`transparent_background: true`；最多五张，按输入顺序发送官方 JSON `images/edits`。按文件内容解码且不缩放，PNG/JPEG/WebP 保留原字节，其余可解码格式转 PNG；相对路径、不可读取/解码、超量及与 recent 冲突均不发请求。无引用或空路径数组保持 generation。“修改最近一张/五张图片”传 `num_last_images_to_include: 1` / `5`，从 `ctx.sessionManager.getBranch()` 活动分支取最新图片，按选中图片时间顺序发 JSON edits；非当前分支不混入。数量仅一至五整数，历史不足报错，互斥/无效引用不发请求（包括 pi 会转换的原始小数/字符串参数），不降级生成。#3 mock 经公开 session/fake HTTP 验证；真实 JSON edits 兼容与透明效果未验证。
 - `src/config.ts` 的 `loadConfig()`：共同配置与认证；`requestImage()`：JSON `generations`/`edits` 共享传输，没有 multipart 或 CLI fallback。
-- `src/output.ts` 的 `imageOutput()`：统一第一项 image content、保存与 warning。`details.original` 标记本包 source/version、MIME、SHA256，成功保存时是原图路径，失败/禁用保存时留原始 base64；#4 应验证 provenance/hash 并从公开 session branch 取自产原图，而非把 pi 缩放预览当原图。自动 normalize 保留 details；任意其它扩展仍可能替换 details，不承诺通用宿主保证。
+- `src/output.ts` 的 `imageOutput()`：统一第一项 image content、保存与 warning。`details.original` 标记本包 source/version、MIME、SHA256，成功保存时是原图路径，失败/禁用保存时留原始 base64；`src/recent.ts` 仅对本包对应工具调用结果信任该记录，验证 source/version/hash 后取原字节；路径替换/失效拒绝，不自动用预览。外部图或丢失原图记录的图可用现存 image content，并在结果中标记 `references[].source: session-preview` 与 warning，不宣称取得原图；外部工具的 original/path 不被读取。自动 normalize 保留 details；任意其它扩展仍可能替换 details，来源字段不是防恶意扩展的签名，不承诺通用宿主保证。
 - #5 才实现主动 CLI 备用闭环；完整脚本已打包但本票不执行。所有 Python 操作仅 uv。原脚本默认 `gpt-image-2` 未修改，不表示 pi CLI 默认决策已定。
 - 真网关 JSON edits、透明支持、multipart 策略、候选外模型与 CLI 默认仍待确认；只 gate 受影响分支。

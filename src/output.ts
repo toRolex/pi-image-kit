@@ -8,8 +8,7 @@ export interface ImageDetails {
   savedPath?: string;
   warning?: string;
   transparency: { requested: boolean; reported: 'transparent' | 'opaque' | 'unknown'; verified: false };
-  // Original provenance survives pi preview resizing. #4 must check the hash
-  // before using a path and must not label arbitrary session previews originals.
+  // 原图来源记录随 pi 预览缩放保留；recent 使用路径前校验 hash，外部预览不冒称原图。
   original: { source: 'pi-image-kit'; version: 1; mimeType: string; sha256: string; path?: string; base64?: string };
 }
 
@@ -26,8 +25,7 @@ function decodeFirst(response: ImageResponse): { data: string; bytes: Buffer; mi
   throw new Error('图像服务首项结果不是可展示的 PNG、JPEG 或 WebP 图片。');
 }
 
-// Shared result exit for generation and future edits. Saving is optional and
-// never converts a successful generation into a failed tool result.
+// 生成与编辑共用结果出口；保存可选，保存失败不把已生成的图片变为工具失败。
 export async function imageOutput(response: ImageResponse, model: string, transparent: boolean, saveDirectory: string | false) {
   const image = decodeFirst(response);
   const details: ImageDetails = {

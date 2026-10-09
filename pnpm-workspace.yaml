@@ -1,0 +1,9 @@
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+strictDepBuilds: true
+
+# 只批准锁文件中的 esbuild 安装脚本；无需运行其余依赖脚本。
+allowBuilds:
+  esbuild@0.28.2: true
+  '@google/genai': false
+  protobufjs: false

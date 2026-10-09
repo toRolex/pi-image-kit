@@ -1,0 +1,358 @@
+{
+  "baseline": {
+    "project": "OpenAI Codex",
+    "version": "0.160.0",
+    "commit": "a956835d020762cb2b570053af06f643a11c0ecc",
+    "license": "Apache-2.0",
+    "snapshot": "vendor/codex-0.160.0",
+    "upgradePolicy": "Review required; never follow latest automatically"
+  },
+  "pi": {
+    "package": "@earendil-works/pi-coding-agent",
+    "testedVersion": "1.1.0",
+    "commit": "abe508e1b89912adde45528136c3221eb69acdd7",
+    "source": "https://github.com/earendil-works/pi/tree/abe508e1b89912adde45528136c3221eb69acdd7/packages/coding-agent",
+    "documentation": "Official installed 1.1.0 package docs, declarations and fixed sources. Initial Context7 resolve failed; ticket #4 successfully resolved and queried /earendil-works/pi for getBranch and tool result details persistence; exact normalization behavior remains grounded in fixed 1.1.0 sources."
+  },
+  "snapshots": [
+    {
+      "path": "vendor/codex-0.160.0/LICENSE",
+      "upstreamPath": "LICENSE",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/LICENSE",
+      "gitBlobSha1": "4606e72e042564097e8780d66c1d4dcb611869bd",
+      "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+      "size": 10926,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/NOTICE",
+      "upstreamPath": "NOTICE",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/NOTICE",
+      "gitBlobSha1": "2805899d56d0332d175cfc613c67d45d6f006db7",
+      "sha256": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
+      "size": 242,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/Cargo.toml",
+      "upstreamPath": "codex-rs/Cargo.toml",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/Cargo.toml",
+      "gitBlobSha1": "1a60bc36f8350f25c8ef6d6d7096354d9aaf5314",
+      "sha256": "e558c28aaf94c9f20c7d57224eb9509084e31110850aad24d04bef7811dc335d",
+      "size": 20615,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/codex-api/src/endpoint/images.rs",
+      "upstreamPath": "codex-rs/codex-api/src/endpoint/images.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/codex-api/src/endpoint/images.rs",
+      "gitBlobSha1": "2217ce89611c7c7cb8509a4315512f8784fea867",
+      "sha256": "98894faf1a7f46d79e456ef4a195ff3ead0f46b111b112e5882ba69c86c128fc",
+      "size": 13756,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/codex-api/src/images.rs",
+      "upstreamPath": "codex-rs/codex-api/src/images.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/codex-api/src/images.rs",
+      "gitBlobSha1": "3f14d17334213b8a2cc3848c29a7ad8547e8b537",
+      "sha256": "b8cf89eb7832ea32ef4729ed6b50bbc71b507b85e9909a313bf8a7f6ecf060e8",
+      "size": 1917,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/BUILD.bazel",
+      "upstreamPath": "codex-rs/ext/image-generation/BUILD.bazel",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/BUILD.bazel",
+      "gitBlobSha1": "97698380e65fc15ab7041d895b4e42ffa7079c63",
+      "sha256": "f838618549c58709f1542f99fab96405a62d8f35d0cbe8a7720a65c93d948805",
+      "size": 208,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/Cargo.toml",
+      "upstreamPath": "codex-rs/ext/image-generation/Cargo.toml",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/Cargo.toml",
+      "gitBlobSha1": "4b6155730645092549a69e2f46b926407091c78d",
+      "sha256": "aa8a6fec46b64f183014df9f6f410ab47c2d453714c543e8163089d572af7555",
+      "size": 1152,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/imagegen_description.md",
+      "upstreamPath": "codex-rs/ext/image-generation/imagegen_description.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/imagegen_description.md",
+      "gitBlobSha1": "0e793f2a8d4950929e3f6dd8f7a5c5c766cb12f1",
+      "sha256": "ee89dd3b9df94cc8b42b14e48714c68d11d4cd66113853b42ccf9cbd7858af61",
+      "size": 2099,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/src/artifact.rs",
+      "upstreamPath": "codex-rs/ext/image-generation/src/artifact.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/src/artifact.rs",
+      "gitBlobSha1": "6c6fce0f9812d88daf5a53880a77485c6eea6cb3",
+      "sha256": "a5e6477035945eeeb4128f122ca382b8c3a11e55e9f599bb55136fbc685ad0de",
+      "size": 1725,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/src/backend.rs",
+      "upstreamPath": "codex-rs/ext/image-generation/src/backend.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/src/backend.rs",
+      "gitBlobSha1": "105667dbe4a9a90f9daa2d44cf4dd2dc21d93a08",
+      "sha256": "a46c6c4efd9cecb1a46d384adc8c5d3c71fc73fbd4d6e75641a85bcea92fa69c",
+      "size": 4366,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/src/extension.rs",
+      "upstreamPath": "codex-rs/ext/image-generation/src/extension.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/src/extension.rs",
+      "gitBlobSha1": "d36a14cf655b6f54ede1f3ca3a5f25e5c33a2b26",
+      "sha256": "18d276854dc851daffeaf6e33374997675c27bcb78f9b8765c5c3b01f5f480c9",
+      "size": 4391,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/src/lib.rs",
+      "upstreamPath": "codex-rs/ext/image-generation/src/lib.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/src/lib.rs",
+      "gitBlobSha1": "fd9db419309e5b06acb944a553f5ef144c8a261d",
+      "sha256": "c710abe1967cd3f7faaf78c0a35de0f5e6cc5c461f130b79d2b25d27ba8df9de",
+      "size": 196,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/src/tests.rs",
+      "upstreamPath": "codex-rs/ext/image-generation/src/tests.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/src/tests.rs",
+      "gitBlobSha1": "a2008d4e52f17e162ea6d8b5ea9c0a01ed76ecd5",
+      "sha256": "9b4b9c04a7a5ead8606bc70cf102e1a9986a46754c6b0dcac55c16af1725e477",
+      "size": 15503,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/image-generation/src/tool.rs",
+      "upstreamPath": "codex-rs/ext/image-generation/src/tool.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/image-generation/src/tool.rs",
+      "gitBlobSha1": "f31a130ce3ac3137679886f0eb87ffcdc404e565",
+      "sha256": "1aa00a3013fdabf547f890b43cc3ff3a0217df6240fb9989a6fe6a03e9272fe7",
+      "size": 26563,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/ext/items/src/image_generation.rs",
+      "upstreamPath": "codex-rs/ext/items/src/image_generation.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/ext/items/src/image_generation.rs",
+      "gitBlobSha1": "8cc20123c03e7c1d42d08f1f7266d64e8b5b68fc",
+      "sha256": "fdb87252855486060122b0ea088d75bdcf3513f0779643c1435c3fc2b7f6fb1c",
+      "size": 1939,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/LICENSE.txt",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/LICENSE.txt",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/LICENSE.txt",
+      "gitBlobSha1": "13e25df86ce06eb6488e6a6bc5c5847f5dedc352",
+      "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+      "size": 10776,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/SKILL.md",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/SKILL.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/SKILL.md",
+      "gitBlobSha1": "c39b1f921ce679f08416ab16ceb01945835bb950",
+      "sha256": "681ddb4ad6d06a2acc78a3535b583f8d0c1ea800ecda3d56370d3310fd2cd4ba",
+      "size": 19201,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/agents/openai.yaml",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/agents/openai.yaml",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/agents/openai.yaml",
+      "gitBlobSha1": "5e01d4410ef4918b45d942175e7ddc39ba7ab5d2",
+      "sha256": "9ca574af14580dc7a2a3dc37a1796d17f93cb8850be66501f0799ef8603e9dc0",
+      "size": 275,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/assets/imagegen-small.svg",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/assets/imagegen-small.svg",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/assets/imagegen-small.svg",
+      "gitBlobSha1": "20128b2dba2b93ecd7c398bb379b6049dc94a944",
+      "sha256": "cff5f34f57ff60b3ee92eaedd17b15e96dd4b9e776df3e78936c9e00d42be294",
+      "size": 2889,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/assets/imagegen.png",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/assets/imagegen.png",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/assets/imagegen.png",
+      "gitBlobSha1": "94b54541a9affd39a7aa09d0efd5bc6b712b723b",
+      "sha256": "95952f644064eb9e890f98d8db07216347186526e4c41ad66d3420629eb86e20",
+      "size": 1711,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/cli.md",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/references/cli.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/references/cli.md",
+      "gitBlobSha1": "748c83c745b6f010d4afba27224cb947c02e9485",
+      "sha256": "ecfc2e09261a0feb3482517a5fa0ff410cb7d1958e3cbd2ac6b61586f5b81405",
+      "size": 9655,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/codex-network.md",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/references/codex-network.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/references/codex-network.md",
+      "gitBlobSha1": "5ce1fbc748bdccdd837c35b37b6cc1c95c0aa89b",
+      "sha256": "c88298ca4481f6116a16fa7987434fc977f8b311c1bbc0c3d862ffd0c5981148",
+      "size": 1779,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/image-api.md",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/references/image-api.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/references/image-api.md",
+      "gitBlobSha1": "64eff30ee6ab19671ff31b83c992ac19e9829430",
+      "sha256": "dc975d7af8a4888967251a0276014b4a71ea30455294944b762256373ce3e569",
+      "size": 6072,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/prompting.md",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/references/prompting.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/references/prompting.md",
+      "gitBlobSha1": "5a826563580bc014897fa61629314ae8a6171513",
+      "sha256": "b210b051c775860267080941eba968212bf0ac7fce581d75c5dcc217d8293f8b",
+      "size": 8282,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/sample-prompts.md",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/references/sample-prompts.md",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/references/sample-prompts.md",
+      "gitBlobSha1": "3e6b46fd02ed7bc85d771a1c35c1c85e9db16ddd",
+      "sha256": "70474177d151855b175c6133de2aae1d90b7f146b0dab50ec830972c47d72183",
+      "size": 17617,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/scripts/image_gen.py",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/scripts/image_gen.py",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/scripts/image_gen.py",
+      "gitBlobSha1": "ca78422d715585f6983a300199ed79e45bdb7ac0",
+      "sha256": "b4345cf835e5b593b97df6bb2b70bda493b8a97eee4cabbc99b2fa57dba9b448",
+      "size": 34667,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/scripts/remove_chroma_key.py",
+      "upstreamPath": "codex-rs/skills/src/assets/samples/imagegen/scripts/remove_chroma_key.py",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/skills/src/assets/samples/imagegen/scripts/remove_chroma_key.py",
+      "gitBlobSha1": "f14df3551888464cd9dc7b75c9678c20f084ed97",
+      "sha256": "a5893c4bd04b21abced33731ea89d2ac428e81d92a0368eb18ffbe4fda5253e2",
+      "size": 13905,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/utils/image/src/lib.rs",
+      "upstreamPath": "codex-rs/utils/image/src/lib.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/utils/image/src/lib.rs",
+      "gitBlobSha1": "58b5050ace2178a6c6d089fe4d0075703ecdeeca",
+      "sha256": "e0b791b2c834ec8407e9ce59bffdf047e0b1310a29b2339ff4e037cad4bd280a",
+      "size": 16151,
+      "modified": false
+    },
+    {
+      "path": "vendor/codex-0.160.0/codex-rs/protocol/src/models.rs",
+      "upstreamPath": "codex-rs/protocol/src/models.rs",
+      "url": "https://github.com/openai/codex/blob/a956835d020762cb2b570053af06f643a11c0ecc/codex-rs/protocol/src/models.rs",
+      "gitBlobSha1": "318a4faa3df0d840fedcfecbea4cba4ca81096d3",
+      "sha256": "916a595e136f4d7e32ce259f50678ffe818af2ea6a92f54d8628f57bfd4d43e7",
+      "size": 159721,
+      "modified": false
+    }
+  ],
+  "runtime": [
+    {
+      "path": "skills/imagegen/LICENSE.txt",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/LICENSE.txt",
+      "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/SKILL.md",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/SKILL.md",
+      "sha256": "6240be469e6a4e223e2c3ea160c5f15f62b4caa4d517592494f6d433e6c25a1d",
+      "modified": true,
+      "modifiedOn": "2026-10-08",
+      "adaptation": "非官方 pi image_generate 路由、endpoint/Bearer、模型选择与未决策略、原图/预览、pi 保存路径；#3 绝对路径 JSON 编辑；#4 活动分支 recent1..5、原始数量校验、来源/hash 原图与外部预览限制、交付只 copy 并保留受追踪原图；#5 任意模型选择均不是 CLI 授权，明确 CLI 选择及独立费用/网络/数据授权门、uv 固定依赖完整官方脚本、mock/真实验收分离，CLI 默认未决。完整提示、检查、迭代指导与不可变 snapshot 保留。"
+    },
+    {
+      "path": "skills/imagegen/agents/openai.yaml",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/agents/openai.yaml",
+      "sha256": "9ca574af14580dc7a2a3dc37a1796d17f93cb8850be66501f0799ef8603e9dc0",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/assets/imagegen-small.svg",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/assets/imagegen-small.svg",
+      "sha256": "cff5f34f57ff60b3ee92eaedd17b15e96dd4b9e776df3e78936c9e00d42be294",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/assets/imagegen.png",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/assets/imagegen.png",
+      "sha256": "95952f644064eb9e890f98d8db07216347186526e4c41ad66d3420629eb86e20",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/references/cli.md",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/cli.md",
+      "sha256": "8c6af1fd060e78564aae3de7e4b1c01a5180971d58631620fafa224e8f20530b",
+      "modified": true,
+      "modifiedOn": "2026-10-08",
+      "adaptation": "pi 适配：明确 CLI 选择与独立费用/网络/数据授权门、uv 固定依赖执行完整官方脚本、endpoint/Bearer 配置、mock/真实验收分离；CLI 默认未决。上游完整正文与不可变 snapshot 保留。"
+    },
+    {
+      "path": "skills/imagegen/references/codex-network.md",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/codex-network.md",
+      "sha256": "c88298ca4481f6116a16fa7987434fc977f8b311c1bbc0c3d862ffd0c5981148",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/references/image-api.md",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/image-api.md",
+      "sha256": "dc975d7af8a4888967251a0276014b4a71ea30455294944b762256373ce3e569",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/references/prompting.md",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/prompting.md",
+      "sha256": "b210b051c775860267080941eba968212bf0ac7fce581d75c5dcc217d8293f8b",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/references/sample-prompts.md",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/references/sample-prompts.md",
+      "sha256": "70474177d151855b175c6133de2aae1d90b7f146b0dab50ec830972c47d72183",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/scripts/image_gen.py",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/scripts/image_gen.py",
+      "sha256": "b4345cf835e5b593b97df6bb2b70bda493b8a97eee4cabbc99b2fa57dba9b448",
+      "modified": false
+    },
+    {
+      "path": "skills/imagegen/scripts/remove_chroma_key.py",
+      "snapshot": "vendor/codex-0.160.0/codex-rs/skills/src/assets/samples/imagegen/scripts/remove_chroma_key.py",
+      "sha256": "a5893c4bd04b21abced33731ea89d2ac428e81d92a0368eb18ffbe4fda5253e2",
+      "modified": false
+    }
+  ]
+}

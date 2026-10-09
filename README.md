@@ -14,6 +14,8 @@ pi install /absolute/path/to/pi-image-kit
 
 在 pi agent 目录（通常 `~/.pi/agent`）建立 **私有** `image-kit.json`，或在项目 `.pi/image-kit.json` 配置；项目字段覆盖全局字段。配置一次即可，无需每次操作 CLI 或环境变量。不要把密钥粘贴进聊天、提交配置，或移植 ChatGPT 登录。
 
+**认证隔离**：项目更改 `endpoint`（包括相同 origin 下不同 base path）时，必须在项目配置中显式提供非空 `apiKey`；否则执行前以固定脱敏错误拒绝，不发送请求、不继承全局 Bearer。全局仅配置 key 而无 endpoint 也不能授权项目 endpoint。仅末尾斜杠不同视为同一基址；同基址或仅覆盖其它字段仍可继承全局 key。项目空白/空 key 不会回退全局 key。仅全局或仅项目的完整配置照常有效。包注册只读取 `exposure`，不要求凭据；上述检查在工具执行的 `loadConfig()` 中进行。
+
 ```json
 {
   "endpoint": "https://images.example.invalid/v1",
@@ -62,7 +64,13 @@ pnpm test
 PI_IMAGE_KIT_LEGACY_SEARCH_SOURCE=/absolute/path/to/public/pi-tool-search/src/extension.ts pnpm test
 ```
 
-公共资源审计 command 检查完整清单、hash、Git blob 与 modified 标识；测试实际破坏临时副本，验证缺件、快照改动、未标记修改和意外文件会失败。开发依赖按锁文件安装。本机全新 pnpm 开发依赖安装仍受 pi 1.1.0 的 minimum-release-age 策略与未批准 dependency build scripts 阻塞；机器生成的 age-exclude 配置不入库，不擅自批准/绕过。#4 合入 #5 时，已有依赖下曾完整测试 78/78（含旧部署专项）通过；不代表 fresh install 策略通过。review 修复后，直接 `node --import tsx --test tests/*.test.ts` 默认并行全套 **84 通过、0 失败、1 skip**（含后续三个初始化失败回归；未设置旧搜索源码），旧搜索专项另跑 **1/1**；typecheck、29 snapshot / 12 runtime 资源审计通过。既有 30ms timeout flake 已修复：review 六 worker 曾复现 30 项中 7 失败；现在请求头挂起用 500ms，并区分连接前 abort（0 请求）与已到达（最多 1 请求），响应体挂起用 1000ms、显式 flush headers 并核对场景已到达。相同六 worker 复核 **30/30** 通过，保持 timeout、不重试和不 fallback；不是生产超时实现损坏或无限调大 deadline 的结论。
+公共资源审计 command 检查完整清单、hash、Git blob 与 modified 标识；测试实际破坏临时副本，验证缺件、快照改动、未标记修改和意外文件会失败。开发依赖按锁文件安装。此前全新 pnpm 开发依赖安装因 pi 1.1.0 发布时间及未审阅 dependency build scripts 阻塞；2026-10-09 在独立空 node_modules 目录使用 pnpm 12.10.1 和冻结锁文件安装通过，内容缓存复用，不等于空缓存下载。保留 1440 分钟 release-age 严格检查，仅批准固定 esbuild@0.28.2 安装脚本，其它脚本明确拒绝，不加 age-exclude 或关闭安全门。#4 合入 #5 时，已有依赖下曾完整测试 78/78（含旧部署专项）通过；不代表 fresh install 策略通过。review 修复后，直接 `node --import tsx --test tests/*.test.ts` 默认并行全套 **84 通过、0 失败、1 skip**（含后续三个初始化失败回归；未设置旧搜索源码），旧搜索专项另跑 **1/1**；typecheck、29 snapshot / 12 runtime 资源审计通过。既有 30ms timeout flake 已修复：review 六 worker 曾复现 30 项中 7 失败；现在请求头挂起用 500ms，并区分连接前 abort（0 请求）与已到达（最多 1 请求），响应体挂起用 1000ms、显式 flush headers 并核对场景已到达。相同六 worker 复核 **30/30** 通过，保持 timeout、不重试和不 fallback；不是生产超时实现损坏或无限调大 deadline 的结论。
+
+## CI
+
+GitHub Actions 在 PR 更新和 `main` push 时运行冻结锁文件安装、类型检查、29/12 固定资源审计及完整 mock 回归（含 uv 执行的官方 CLI localhost 闭环）。使用只读权限、不保留 checkout 凭据、固定 action commit SHA，不配置真实服务 secret 或执行真实 Images 请求。Node 22.23.2、pnpm 12.10.1、uv 0.12.23 与本地验收版本一致。
+
+新增凭据隔离后，在独立干净依赖目录执行与 CI 相同的命令：**105 通过、0 失败、1 skip**；配置回归 20/20，公开 session 验证项目仅改 endpoint 时错误脱敏且服务收到 0 请求。skip 为需额外提供公共源码的旧 pi-tool-search 专项，不把未运行项算作通过；云端 CI 结果以当前提交的 GitHub Checks 为准。
 
 ## 已验收与未验收
 
@@ -106,4 +114,4 @@ node /absolute/package/scripts/run-image-cli.mjs --choose-cli --allow-network-da
 
 2026-10-08 合入 #3 integration `361fecc37519044f4ddf02cc6bacb3e52bb94f7e` 后验收：串行全套 **56 通过、0 失败、1 skip**（未配置旧部署源码专项）；typecheck、29 snapshot / 12 runtime 资源审计通过。合入前一次并行全测因既有 30ms timeout 未捕获请求失败，串行复测通过，未修改共享测试或 timeout。pnpm scripts 前置安装仍报 release-age 策略阻塞；实际脚本可在已有依赖运行，不算 fresh 安装通过。
 
-真实 CLI API 验收未执行，不算通过。用户本次只授权默认工具验收，没有选择 CLI 备用路线。CLI 默认是否改为 2.5 仍未决，保留官方 `gpt-image-2` 与 `medium` 不等于策略定案。该阶段 Context7 resolve 曾失败，固定官方源码仍可核查。全新 pnpm 开发依赖安装未验收，不与上面的清洁生产包安装混为一谈，也不绕过 pnpm age 与 build scripts 策略。
+真实 CLI API 验收未执行，不算通过。用户本次只授权默认工具验收，没有选择 CLI 备用路线。CLI 默认是否改为 2.5 仍未决，保留官方 `gpt-image-2` 与 `medium` 不等于策略定案。该阶段 Context7 resolve 曾失败，固定官方源码仍可核查。全新开发依赖安装在上述历史阶段未验收；2026-10-09 的独立空 node_modules 冻结安装与 CI 等效回归见 CI 小节，不与清洁生产包安装或空缓存下载混为一谈，也不绕过 pnpm age 与 build scripts 策略。

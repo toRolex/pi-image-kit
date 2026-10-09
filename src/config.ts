@@ -22,11 +22,10 @@ async function readConfig(path: string): Promise<Record<string, unknown>> {
   }
 }
 
-async function readMergedConfig(cwd: string): Promise<Record<string, unknown>> {
-  return {
-    ...await readConfig(join(getAgentDir(), 'image-kit.json')),
-    ...await readConfig(join(cwd, '.pi', 'image-kit.json')),
-  };
+async function readConfigLayers(cwd: string) {
+  const global = await readConfig(join(getAgentDir(), 'image-kit.json'));
+  const project = await readConfig(join(cwd, '.pi', 'image-kit.json'));
+  return { global, project };
 }
 
 function parseExposure(exposure: unknown): 'direct' | 'deferred' {
@@ -36,7 +35,16 @@ function parseExposure(exposure: unknown): 'direct' | 'deferred' {
 }
 
 export async function loadConfig(cwd: string): Promise<ImageKitConfig> {
-  const value = await readMergedConfig(cwd);
+  const { global, project } = await readConfigLayers(cwd);
+  // 认证绑定完整基址，不只绑定 origin；仅忽略末尾斜杠，避免跨路径泄露全局密钥。
+  const sameEndpoint = typeof project.endpoint === 'string' && typeof global.endpoint === 'string'
+    && project.endpoint.replace(/\/+$/, '') === global.endpoint.replace(/\/+$/, '');
+  if (project.endpoint !== undefined && !sameEndpoint
+    && typeof global.apiKey === 'string' && global.apiKey.trim()
+    && (typeof project.apiKey !== 'string' || !project.apiKey.trim())) {
+    throw new Error('image-kit 项目更改 endpoint 时必须显式配置有效 apiKey；不会继承全局密钥。');
+  }
+  const value = { ...global, ...project };
   if (typeof value.endpoint !== 'string' || typeof value.apiKey !== 'string' || !value.apiKey.trim()) {
     throw new Error('请先在 pi agent 目录或项目 .pi/image-kit.json 配置 endpoint 与 apiKey；不要在会话粘贴密钥。');
   }
@@ -62,6 +70,6 @@ export async function loadConfig(cwd: string): Promise<ImageKitConfig> {
 
 // 加载包无需凭据；注册仅读取可选 exposure，执行时才检查完整服务配置。
 export async function loadExposure(cwd: string): Promise<'direct' | 'deferred'> {
-  const value = await readMergedConfig(cwd);
-  return parseExposure(value.exposure);
+  const { global, project } = await readConfigLayers(cwd);
+  return parseExposure({ ...global, ...project }.exposure);
 }

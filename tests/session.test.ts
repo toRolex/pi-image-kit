@@ -20,6 +20,7 @@ interface Scenario {
   body?: unknown;
   delay?: boolean;
   config?: Record<string, unknown>;
+  globalConfig?: Record<string, unknown>;
   searches?: number;
   legacySearch?: string;
   saveFailure?: boolean;
@@ -70,6 +71,10 @@ async function run(scenario: Scenario = {}) {
     scenario.onSetup?.('server', dir, activeServer);
     const address = activeServer.address() as { port: number };
     await mkdir(join(dir, '.pi'));
+    if (scenario.globalConfig) {
+      await mkdir(join(dir, 'agent'));
+      await writeFile(join(dir, 'agent', 'image-kit.json'), JSON.stringify(scenario.globalConfig));
+    }
     if (scenario.saveFailure) await writeFile(join(dir, 'blocked'), 'not a directory');
     await writeFile(join(dir, '.pi', 'image-kit.json'), scenario.rawConfig ?? JSON.stringify({ endpoint: `http://127.0.0.1:${address.port}/v1`, apiKey: secret, ...(scenario.saveFailure ? { saveDirectory: join(dir, 'blocked') } : {}), ...scenario.config }));
     await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
@@ -635,6 +640,23 @@ for (const scenario of [
     } finally { await value.cleanup(); }
   });
 }
+
+test('项目仅 endpoint 不得继承全局 Bearer，公开工具失败且服务零请求', async () => {
+  const value = await run({
+    globalConfig: { endpoint: 'https://global-private.invalid/v1', apiKey: secret },
+    config: { apiKey: undefined },
+  });
+  try {
+    assert.deepEqual(value.errors, []);
+    assert.equal(value.tools.filter((tool) => tool.name === 'image_generate').length, 1);
+    assert.equal(value.requests.length, 0);
+    assert.ok(value.result?.role === 'toolResult' && value.result.isError);
+    assert.match(JSON.stringify(value.result), /项目更改 endpoint 时必须显式配置有效 apiKey/);
+    const visible = JSON.stringify({ messages: value.messages, errors: value.errors, modelInputs: value.modelInputs });
+    assert.ok(!visible.includes(secret));
+    assert.ok(!visible.includes('global-private.invalid'));
+  } finally { await value.cleanup(); }
+});
 
 test('missing API key is a local configuration error and makes no service request', async () => {
   const value = await run({ config: { apiKey: '' } });
